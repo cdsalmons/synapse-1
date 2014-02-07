@@ -305,7 +305,12 @@ class ActiveRecord::Base
     end
 
     def get_selector_instance
-      attrs = @arel.ast.cores.first.wheres.map { |w| [w.children.first.left.name, w.children.first.right] }
+      attrs = @arel.ast.cores.first.wheres.map do |w|
+        case w
+        when Arel::Nodes::Grouping then nil
+        else [w.children.first.left.name, w.children.first.right]
+        end
+      end.compact
       model.instantiate(Hash[attrs])
     end
 
