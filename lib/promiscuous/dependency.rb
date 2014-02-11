@@ -68,7 +68,8 @@ class Promiscuous::Dependency
   # We need the eql? method to function properly (we use ==, uniq, ...) in operation
   # XXX The version is not taken in account.
   def eql?(other)
-    self.internal_key == other.internal_key
+    other.is_a?(Promiscuous::Dependency) &&
+      self.internal_key == other.internal_key
   end
   alias == eql?
 
