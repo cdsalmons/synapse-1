@@ -11,7 +11,7 @@ describe Promiscuous, 'bootstrapping dependencies' do
   #
 
   context 'when in publisher is in bootstrapping mode' do
-    before { Promiscuous::Publisher::Bootstrap::Mode.enable }
+    before { Promiscuous::Config.downgrade_reads_to_writes = true }
 
     it 'read dependencies are upgraded to write dependencies' do
       pub1 = pub2 = nil
@@ -28,12 +28,12 @@ describe Promiscuous, 'bootstrapping dependencies' do
       dep = Promiscuous::AMQP::Fake.get_next_payload['dependencies']
 
       dep['read'].should == nil
-      dep['write'].should == hashed["publisher_models/id/#{pub2.id}:1", "publisher_models/id/#{pub1.id}:2"]
+      dep['write'].should == hashed["publisher_models/id/#{pub2.id}:0", "publisher_models/id/#{pub1.id}:1"]
     end
   end
 
   context 'when publisher is not in bootstrapping mode' do
-    before { Promiscuous::Publisher::Bootstrap::Mode.disable }
+    before { Promiscuous::Config.downgrade_reads_to_writes = false }
 
     it 'read dependencies are not upgraded to write dependencies' do
       pub1 = pub2 = nil
@@ -49,7 +49,7 @@ describe Promiscuous, 'bootstrapping dependencies' do
       dep = Promiscuous::AMQP::Fake.get_next_payload['dependencies']
 
       dep['read'].should  == hashed["publisher_models/id/#{pub1.id}:1"]
-      dep['write'].should == hashed["publisher_models/id/#{pub2.id}:1"]
+      dep['write'].should == hashed["publisher_models/id/#{pub2.id}:0"]
     end
   end
 end
@@ -62,13 +62,13 @@ describe Promiscuous, 'bootstrapping replication' do
 
   context 'when there are no races with publishers' do
     it 'bootstraps' do
-      Promiscuous::Publisher::Bootstrap::Mode.enable
+      Promiscuous::Config.downgrade_reads_to_writes = true
       Promiscuous.context { 10.times { PublisherModel.create } }
 
       switch_subscriber_mode(:pass1)
 
       Promiscuous::Publisher::Bootstrap::Version.bootstrap
-      Promiscuous::Publisher::Bootstrap::Mode.disable
+      Promiscuous::Config.downgrade_reads_to_writes = false
 
       sleep 1
 
@@ -101,9 +101,9 @@ describe Promiscuous, 'bootstrapping replication' do
 
       Promiscuous.context { 10.times { PublisherModel.create } }
       switch_subscriber_mode(:pass1)
-      Promiscuous::Publisher::Bootstrap::Mode.enable
+      Promiscuous::Config.downgrade_reads_to_writes = true
       Promiscuous::Publisher::Bootstrap::Version.bootstrap
-      Promiscuous::Publisher::Bootstrap::Mode.disable
+      Promiscuous::Config.downgrade_reads_to_writes = false
       sleep 1
       switch_subscriber_mode(:pass2)
       Promiscuous::Publisher::Bootstrap::Data.setup
@@ -119,14 +119,14 @@ describe Promiscuous, 'bootstrapping replication' do
 
   context 'when updates happens after the version bootstrap, but before the document is replicated' do
     it 'bootstraps' do
-      Promiscuous::Publisher::Bootstrap::Mode.enable
+      Promiscuous::Config.downgrade_reads_to_writes = true
       Promiscuous.context { 10.times { PublisherModel.create } }
 
       switch_subscriber_mode(:pass1)
 
       Promiscuous::Publisher::Bootstrap::Version.bootstrap
       sleep 1
-      Promiscuous::Publisher::Bootstrap::Mode.disable
+      Promiscuous::Config.downgrade_reads_to_writes = false
 
       Promiscuous.context { PublisherModel.first.update_attributes(:field_2 => 'hello') }
 
@@ -150,14 +150,14 @@ describe Promiscuous, 'bootstrapping replication' do
 
   context 'when updates happens after the data bootstrap, but before the bootstrap mode is turned off' do
     it 'bootstraps' do
-      Promiscuous::Publisher::Bootstrap::Mode.enable
+      Promiscuous::Config.downgrade_reads_to_writes = true
       Promiscuous.context { 10.times { PublisherModel.create } }
 
       switch_subscriber_mode(:pass1)
 
       Promiscuous::Publisher::Bootstrap::Version.bootstrap
       sleep 1
-      Promiscuous::Publisher::Bootstrap::Mode.disable
+      Promiscuous::Config.downgrade_reads_to_writes = false
 
       switch_subscriber_mode(:pass2)
 
@@ -178,77 +178,6 @@ describe Promiscuous, 'bootstrapping replication' do
 
       eventually { SubscriberModel.first.field_2.should == 'hello' }
     end
-  end
-
-  context 'when bootstrapping an observer' do
-    before { load_observers }
-    before do
-      ModelObserver.class_eval do
-        cattr_accessor :saved, :created
-
-        after_save   { self.saved = true }
-        after_create { self.created = true }
-      end
-    end
-
-    it 'calls the create and save observers' do
-      Promiscuous::Publisher::Bootstrap::Mode.enable
-      Promiscuous.context { PublisherModel.create }
-
-      switch_subscriber_mode(:pass1)
-
-      Promiscuous::Publisher::Bootstrap::Version.bootstrap
-
-      switch_subscriber_mode(:pass2)
-
-      Promiscuous::Publisher::Bootstrap::Data.setup
-      Promiscuous::Publisher::Bootstrap::Data.run
-
-      eventually do
-        ModelObserver.saved.should == true
-        ModelObserver.created.should == true
-      end
-    end
-  end
-
-  describe 'bootstrapping large number of docs split over ranges of multiple models' do
-    let(:number_of_docs) { 51 }
-    let(:range_size)     { 9 }
-    before do
-      $counter = 0
-      SubscriberModel.class_eval do
-        after_save { $counter += 1 }
-      end
-      $other_counter = 0
-      SubscriberModelOther.class_eval do
-        after_save { $other_counter += 1 }
-      end
-    end
-    before { Promiscuous::Publisher::Bootstrap::Mode.enable }
-    before { Promiscuous.context { number_of_docs.times { |i| model = PublisherModel.new; model.id = Moped::BSON::ObjectId.from_time(Time.now + i.seconds); model.save } } }
-    before { Promiscuous.context { number_of_docs.times { |i| model = PublisherModelOther.new; model.id = Moped::BSON::ObjectId.from_time(Time.now + i.seconds); model.save } } }
-
-    it "bootstraps" do
-      switch_subscriber_mode(:pass1)
-
-      Promiscuous::Publisher::Bootstrap::Version.bootstrap
-      sleep 1
-      Promiscuous::Publisher::Bootstrap::Mode.disable
-
-      switch_subscriber_mode(:pass2)
-
-      Promiscuous::Publisher::Bootstrap::Data.setup(:range_size => range_size)
-      Promiscuous::Publisher::Bootstrap::Data.run(:lock => { :expire => 2.seconds }) # Ensure that we extend the lock
-
-      eventually do
-        SubscriberModel.count.should == PublisherModel.count
-        SubscriberModelOther.count.should == PublisherModelOther.count
-        $counter.should == SubscriberModel.count
-        $other_counter.should == SubscriberModelOther.count
-      end
-    end
-
-    context "bootstrapping a subset of documents using a timestamp to filter"
   end
 end
 end

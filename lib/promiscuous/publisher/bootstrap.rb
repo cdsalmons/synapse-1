@@ -1,10 +1,8 @@
 module Promiscuous::Publisher::Bootstrap
   extend Promiscuous::Autoload
-  autoload :Connection, :Version, :Data, :Mode, :Status
+  autoload :Connection, :Version, :Data, :Status
 
   def self.setup(options={})
-    puts "Enabling bootstrapping mode"
-    Mode.enable
     puts "Bootstrapping versions..."
     Version.bootstrap
     puts "Setting up data bootstrap..."

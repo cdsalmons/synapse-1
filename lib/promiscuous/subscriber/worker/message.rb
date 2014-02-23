@@ -49,7 +49,7 @@ class Promiscuous::Subscriber::Worker::Message
     @happens_before_dependencies ||= begin
       deps = []
       deps += read_dependencies
-      deps += write_dependencies.map { |dep| dep.dup.tap { |d| d.version -= 1 } }
+      deps += write_dependencies
 
       # We return the most difficult condition to satisfy first
       deps.uniq.reverse

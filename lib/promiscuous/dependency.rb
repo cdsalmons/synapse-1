@@ -1,7 +1,7 @@
 require 'fnv'
 
 class Promiscuous::Dependency
-  attr_accessor :internal_key, :version, :type
+  attr_accessor :internal_key, :version_pass1, :version_pass2, :type
 
   def initialize(*args)
     options = args.extract_options!
@@ -51,18 +51,27 @@ class Promiscuous::Dependency
   end
 
   def as_json(options={})
-    @version ? [@internal_key, @version].join(':') : @internal_key
+    if @version_pass1 && @version_pass2 && !options[:raw]
+      if @version_pass1 == @version_pass2
+        "#{@internal_key}:#{@version_pass1}"
+      else
+        "#{@internal_key}:#{@version_pass1}!#{@version_pass2}"
+      end
+    else
+      @internal_key
+    end
   end
 
   def self.parse(payload, options={})
     case payload
-    when /^(.+):([0-9]+)$/ then new($1, options).tap { |d| d.version = $2.to_i }
-    when /^(.+)$/          then new($1, options)
+    when /^(.+):([0-9]+)!([0-9]+)$/ then new($1, options).tap { |d| d.version_pass1 = $2.to_i; d.version_pass2 = $3.to_i }
+    when /^(.+):([0-9]+)$/          then new($1, options).tap { |d| d.version_pass1 = d.version_pass2 = $2.to_i }
+    when /^(.+)$/                   then new($1, options)
     end
   end
 
-  def to_s
-    as_json.to_s
+  def to_s(options={})
+    as_json(options).to_s
   end
 
   # We need the eql? method to function properly (we use ==, uniq, ...) in operation

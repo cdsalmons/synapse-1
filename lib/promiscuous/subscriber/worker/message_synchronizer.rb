@@ -93,13 +93,16 @@ class Promiscuous::Subscriber::Worker::MessageSynchronizer
         subscriber_redis = dep.redis_node(@redis)
 
         key = dep.key(:sub).join('rw').to_s
-        version = dep.version
+        version = dep.version_pass1
         node_synchronizer = @node_synchronizers[subscriber_redis]
         node_synchronizer.on_version(subscriber_redis, get_redis, key, version, msg) { @message_queue.push([msg, deps]) }
       else
         process_message!(msg)
       end
     end
+  rescue Exception => e
+    Promiscuous.warn "[receive] cannot process message: #{e}\n#{e.backtrace.join("\n")}"
+    Promiscuous::Config.error_notifier.call(e)
   end
 
   def process_message!(msg)

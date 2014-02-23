@@ -29,19 +29,7 @@ class Promiscuous::Subscriber::MessageProcessor::Base
   end
 
   def process_message
-    begin
-      on_message
-    rescue Exception => e
-      @fail_count ||= 0;  @fail_count += 1
-
-      if @fail_count <= Promiscuous::Config.max_retries
-        Promiscuous.warn("[receive] #{e.message} #{@fail_count.ordinalize} retry: #{@message}")
-        sleep @fail_count ** 2
-        process_message
-      else
-        raise e
-      end
-    end
+    on_message
   end
 
   def on_message

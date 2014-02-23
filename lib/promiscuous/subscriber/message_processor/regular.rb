@@ -24,7 +24,7 @@ class Promiscuous::Subscriber::MessageProcessor::Regular < Promiscuous::Subscrib
   def recovery_key
     # We use a recovery_key unique to the operation to avoid any trouble of
     # touching another operation.
-    @recovery_key ||= instance_dep.key(:sub).join(instance_dep.version).to_s
+    @recovery_key ||= instance_dep.key(:sub).join(instance_dep.version_pass2).to_s
   end
 
   def get_current_instance_version
@@ -33,29 +33,17 @@ class Promiscuous::Subscriber::MessageProcessor::Regular < Promiscuous::Subscrib
 
   # XXX TODO Code is not tolerant to losing a lock.
 
-  def update_dependencies_non_atomic_bootstrap(node, r_deps, w_deps, options={})
+  def update_dependencies_non_atomic_bootstrap(node, deps, options={})
+    raise "Message should not have any read deps" if deps.any?(&:read?)
+
     argv = []
-    argv << MultiJson.dump([r_deps.map { |dep| dep.key(:sub) },
-                            w_deps.map { |dep| dep.key(:sub) },
-                            w_deps.map { |dep| dep.version }])
-    argv << recovery_key if options[:with_recovery]
+    argv << MultiJson.dump([deps.map { |dep| dep.key(:sub) },
+                            deps.map { |dep| dep.version_pass2 + 1 }])
 
     @@update_script_bootstrap ||= Promiscuous::Redis::Script.new <<-SCRIPT
       local _args = cjson.decode(ARGV[1])
-      local read_deps = _args[1]
-      local write_deps = _args[2]
-      local write_versions = _args[3]
-      local recovery_key = ARGV[2]
-
-      if recovery_key and redis.call('exists', recovery_key) == 1 then
-        return
-      end
-
-      for i, _key in ipairs(read_deps) do
-        local key = _key .. ':rw'
-        local v = redis.call('incr', key)
-        redis.call('publish', key, v)
-      end
+      local write_deps = _args[1]
+      local write_versions = _args[2]
 
       for i, _key in ipairs(write_deps) do
         local key = _key .. ':rw'
@@ -66,29 +54,28 @@ class Promiscuous::Subscriber::MessageProcessor::Regular < Promiscuous::Subscrib
           redis.call('publish', key, v)
         end
       end
-
-      if recovery_key then
-        redis.call('set', recovery_key, 'done')
-      end
     SCRIPT
 
     @@update_script_bootstrap.eval(node, :argv => argv)
   end
 
-  def update_dependencies_fast(node, r_deps, w_deps, options={})
-    keys = (r_deps + w_deps).map { |dep| dep.key(:sub) }
-    argv = options[:with_recovery] ? [recovery_key] : []
+  def update_dependencies_fast(node, deps, options={})
+    keys = deps.map { |d| d.to_s(:raw => true) }
+    argv = []
+    argv << Promiscuous::Key.new(:sub)
+    argv << recovery_key if options[:with_recovery]
 
     @@update_script_fast ||= Promiscuous::Redis::Script.new <<-SCRIPT
       local deps = KEYS
-      local recovery_key = ARGV[1]
+      local prefix = ARGV[1] .. ':'
+      local recovery_key = ARGV[2]
 
       if recovery_key and redis.call('exists', recovery_key) == 1 then
         return
       end
 
       for i, _key in ipairs(deps) do
-        local key = _key .. ':rw'
+        local key = prefix .. _key .. ':rw'
         local v = redis.call('incr', key)
         redis.call('publish', key, v)
       end
@@ -112,15 +99,10 @@ class Promiscuous::Subscriber::MessageProcessor::Regular < Promiscuous::Subscrib
     # TODO Evaluate the performance hit of this heavy mechanism, and see if it's
     # worth optimizing it for the non-bootstrap case.
 
-    node = node_with_deps[0]
-    r_deps = node_with_deps[1].select(&:read?)
-    w_deps = node_with_deps[1].select(&:write?)
-
     if message.was_during_bootstrap?
-      raise "Message should not have any read deps" unless r_deps.empty?
-      update_dependencies_non_atomic_bootstrap(node, r_deps, w_deps, options)
+      update_dependencies_non_atomic_bootstrap(node_with_deps[0], node_with_deps[1], options)
     else
-      update_dependencies_fast(node, r_deps, w_deps, options)
+      update_dependencies_fast(node_with_deps[0], node_with_deps[1], options)
     end
   end
 
@@ -156,7 +138,15 @@ class Promiscuous::Subscriber::MessageProcessor::Regular < Promiscuous::Subscrib
   end
 
   def duplicate_message?
-    unless instance_dep.version >= get_current_instance_version + 1
+    instance_dep.version_pass2 < get_current_instance_version
+  end
+
+  LOCK_OPTIONS = { :timeout => 1.5.minute, # after 1.5 minute, we give up
+                   :sleep   => 0.1,        # polling every 100ms.
+                   :expire  => 1.minute }  # after one minute, we are considered dead
+
+  def check_duplicate_and_update_dependencies
+    if duplicate_message?
       # We happen to get a duplicate message, or we are recovering a dead
       # worker. During regular operations, we just need to cleanup the 2pc (from
       # the dead worker), and ack the message to rabbit.
@@ -175,18 +165,6 @@ class Promiscuous::Subscriber::MessageProcessor::Regular < Promiscuous::Subscrib
       # but before the message acking).
       update_dependencies if message.was_during_bootstrap?
 
-      true
-    else
-      false
-    end
-  end
-
-  LOCK_OPTIONS = { :timeout => 1.5.minute, # after 1.5 minute, we give up
-                   :sleep   => 0.1,        # polling every 100ms.
-                   :expire  => 1.minute }  # after one minute, we are considered dead
-
-  def check_duplicate_and_update_dependencies
-    if duplicate_message?
       Promiscuous.debug "[receive] Skipping message (already processed) #{message}"
       return
     end

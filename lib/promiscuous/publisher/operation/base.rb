@@ -118,13 +118,15 @@ class Promiscuous::Publisher::Operation::Base
     # The payload can be sent twice, which is okay since the subscribers
     # tolerate it.
     operation_recovery_key = "#{@op_lock.key}:operation_recovery"
-    versions_recovery_key = "#{operation_recovery_key}:versions"
+    versions_pass1_recovery_key = "#{operation_recovery_key}:versions_pass1"
+    versions_pass2_recovery_key = "#{operation_recovery_key}:versions_pass2"
 
     master_node.multi do
       master_node.set(@payload_recovery_key, @payload)
       master_node.zadd(rabbitmq_staging_set_key, Time.now.to_i, @payload_recovery_key)
       master_node.del(operation_recovery_key)
-      master_node.del(versions_recovery_key)
+      master_node.del(versions_pass1_recovery_key)
+      master_node.del(versions_pass2_recovery_key)
     end
 
     # The payload is safe now. We can cleanup all the versions on the
@@ -134,7 +136,10 @@ class Promiscuous::Publisher::Operation::Base
     # secondary_operation_recovery_key will never be cleaned up.
     (w+r).map(&:redis_node).uniq
       .reject { |node| node == master_node }
-      .each   { |node| node.del(versions_recovery_key) }
+      .each   do |node|
+        node.del(versions_pass1_recovery_key)
+        node.del(versions_pass2_recovery_key)
+      end
   end
 
   def payload_for(instance)
@@ -152,7 +157,7 @@ class Promiscuous::Publisher::Operation::Base
     payload[:current_user_id] = current_context.current_user.id if current_context.current_user
     payload[:timestamp] = @timestamp
     payload[:generation] = Promiscuous::Config.generation
-    payload[:host] = Socket.gethostname
+    # payload[:host] = Socket.gethostname
     payload[:was_during_bootstrap] = true if @was_during_bootstrap
     payload[:recovered_operation] = true if recovering?
     payload[:dependencies] = {}
@@ -221,41 +226,12 @@ class Promiscuous::Publisher::Operation::Base
     raise Promiscuous::Error::Recovery.new(message, e)
   end
 
-  def increment_read_and_write_dependencies
-    # We collapse all operations, ignoring the read/write interleaving.
-    # It doesn't matter since all write operations are serialized, so the first
-    # write in the transaction can have all the read dependencies.
-    r = read_dependencies
-    w = write_dependencies
-
-    # We don't need to do a read dependency if we are writing to it, so we
-    # prune them. The subscriber assumes the pruning (i.e. the intersection of
-    # r and w is empty) when it calculates the happens before relationships.
-    r -= w
-
-    master_node = @op_lock.node
-    operation_recovery_key = "#{@op_lock.key}:operation_recovery"
-
-    # We group all the dependencies by their respective shards
-    # The master node will have the responsability to hold the recovery data.
-    # We do the master node first. The seconaries can be done in parallel.
-    @committed_read_deps  = []
-    @committed_write_deps = []
-
-    # We need to do the increments always in the same node order, otherwise.
-    # the subscriber can deadlock. But we must always put the recovery payload
-    # on the master before touching anything.
-    nodes_deps = (w+r).group_by(&:redis_node)
-                      .sort_by { |node, deps| -Promiscuous::Redis.master.nodes.index(node) }
-    if nodes_deps.first[0] != master_node
-      nodes_deps = [[master_node, []]] + nodes_deps
-    end
-
+  def increment_read_and_write_dependencies_stub(num_pass, nodes_deps, operation_recovery_key,
+                                                 inner_script, master_node, recovery_payload_json)
     nodes_deps.each do |node, deps|
       argv = []
       argv << Promiscuous::Key.new(:pub) # key prefixes
       argv << operation_recovery_key
-
       # The index of the first write is then used to pass to redis along with the
       # dependencies. This is done because arguments to redis LUA scripts cannot
       # accept complex data types.
@@ -267,20 +243,17 @@ class Promiscuous::Publisher::Operation::Base
       # Note that the operation_recovery_key on the secondaries have the current
       # version of the instance appended to them. It's easier to cleanup when
       # locks get lost.
-      if node == master_node && !self.recovering?
-        # We are on the master node, which holds the recovery payload
-        argv << MultiJson.dump([self.class.name, operation, r, w, self.recovery_payload])
+      if recovery_payload_json && node == master_node
+        argv << recovery_payload_json
       end
 
-      # FIXME If the lock is lost, we need to backoff
+      deps_str = deps.map { |d| d.to_s(:raw => true) }
 
-      # We are going to store all the versions in redis, to be able to recover.
-      # We store all our increments in a transaction_id key in JSON format.
-      # Note that the transaction_id is the id of the current instance.
-      @@increment_script ||= Promiscuous::Redis::Script.new <<-SCRIPT
+      @@increment_script_pass ||= {}
+      @@increment_script_pass[num_pass] ||= Promiscuous::Redis::Script.new <<-SCRIPT
         local prefix = ARGV[1] .. ':'
         local operation_recovery_key = ARGV[2]
-        local versions_recovery_key = operation_recovery_key .. ':versions'
+        local versions_recovery_key = operation_recovery_key .. ':versions_pass#{num_pass}'
         local first_read_index = tonumber(ARGV[3]) + 1
         local operation_recovery_payload = ARGV[4]
         local deps = KEYS
@@ -288,11 +261,6 @@ class Promiscuous::Publisher::Operation::Base
         local versions = {}
 
         if redis.call('exists', versions_recovery_key) == 1 then
-          first_read_index = tonumber(redis.call('hget', versions_recovery_key, 'read_index'))
-          if not first_read_index then
-            return redis.error_reply('Failed to read dependency index during recovery')
-          end
-
           for i, dep in ipairs(deps) do
             versions[i] = tonumber(redis.call('hget', versions_recovery_key, dep))
             if not versions[i] then
@@ -300,51 +268,82 @@ class Promiscuous::Publisher::Operation::Base
             end
           end
 
-          return { first_read_index-1, versions }
-        end
-
-        if redis.call('exists', prefix .. 'bootstrap') == 1 then
-          first_read_index = #deps + 1
-        end
-
-        if #deps ~= 0 then
-          redis.call('hset', versions_recovery_key, 'read_index', first_read_index)
-        end
-
-        for i, dep in ipairs(deps) do
-          local key = prefix .. dep
-          local rw_version = redis.call('incr', key .. ':rw')
-          if i < first_read_index then
-            redis.call('set', key .. ':w', rw_version)
-            versions[i] = rw_version
-          else
-            versions[i] = tonumber(redis.call('get', key .. ':w')) or 0
-          end
-          redis.call('hset', versions_recovery_key, dep, versions[i])
+          return versions
         end
 
         if operation_recovery_payload then
           redis.call('set', operation_recovery_key, operation_recovery_payload)
         end
 
-        return { first_read_index-1, versions }
+        for i, dep in ipairs(deps) do
+          local key = prefix .. dep
+          #{inner_script}
+          redis.call('hset', versions_recovery_key, dep, versions[i])
+        end
+
+        return versions
       SCRIPT
 
-      received_first_read_index, versions = @@increment_script.eval(node, :argv => argv, :keys => deps)
+      versions = @@increment_script_pass[num_pass].eval(node, :argv => argv, :keys => deps_str)
 
-      deps.zip(versions).each  { |dep, version| dep.version = version }
-
-      @committed_write_deps += deps[0...received_first_read_index]
-      @committed_read_deps  += deps[received_first_read_index..-1]
-      @was_during_bootstrap = true if first_read_index != received_first_read_index
+      deps.zip(versions).each do |dep, version|
+        case num_pass
+        when 1 then dep.version_pass1 = version
+        when 2 then dep.version_pass2 = version
+        end
+      end
     end
+  end
+
+  def increment_read_and_write_dependencies
+    r = read_dependencies
+    w = write_dependencies
+
+    # We don't need to do a read dependency if we are writing to it, so we
+    # prune them. The subscriber assumes the pruning (i.e. the intersection of
+    # r and w is empty) when it calculates the happens before relationships.
+    r -= w
+
+    if Promiscuous::Config.downgrade_reads_to_writes
+      @was_during_bootstrap = true
+      r.each { |d| d.type = :write }
+      w += r
+      r = []
+    end
+
+    master_node = @op_lock.node
+    operation_recovery_key = "#{@op_lock.key}:operation_recovery"
+
+    nodes_deps = (w+r).group_by(&:redis_node)
+
+    unless self.recovering?
+      recovery_payload_json = MultiJson.dump([self.class.name, operation, r, w, self.recovery_payload])
+    end
+
+    increment_read_and_write_dependencies_stub(1, nodes_deps, operation_recovery_key,
+                                               <<-SCRIPT, master_node, recovery_payload_json)
+      if i < first_read_index then
+        versions[i] = tonumber(redis.call('get', key .. ':rw')) or 0
+      else
+        versions[i] = tonumber(redis.call('get', key .. ':w')) or 0
+      end
+    SCRIPT
+
+    increment_read_and_write_dependencies_stub(2, nodes_deps, operation_recovery_key,
+                                               <<-SCRIPT, master_node, nil)
+      local rw_version = redis.call('incr', key .. ':rw')
+      if i < first_read_index then
+        redis.call('set', key .. ':w', rw_version)
+        versions[i] = rw_version - 1
+      else
+        versions[i] = tonumber(redis.call('get', key .. ':w')) or 0
+      end
+    SCRIPT
 
     # The instance version must to be the first in the list to allow atomic
     # subscribers to do their magic.
-    # TODO What happens with transactions with multiple operations?
-    instance_dep_index = @committed_write_deps.index(write_dependencies.first)
-    @committed_write_deps[0], @committed_write_deps[instance_dep_index] =
-      @committed_write_deps[instance_dep_index], @committed_write_deps[0]
+    @committed_write_deps = w
+    @committed_read_deps = r
   end
 
   def self.lock_options
@@ -443,7 +442,7 @@ class Promiscuous::Publisher::Operation::Base
     # We add extra_dependencies, which can contain the latest write, or user
     # context, etc.
     current_context.extra_dependencies.each do |dep|
-      dep.version = nil
+      dep.version_pass1 = dep.version_pass2 = nil
       read_dependencies << dep
     end
 

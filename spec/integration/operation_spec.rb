@@ -20,15 +20,15 @@ require 'spec_helper'
 
         dep = Promiscuous::AMQP::Fake.get_next_payload['dependencies']
         dep['read'].should  == nil
+        dep['write'].should == hashed["publisher_models/id/#{pub.id}:0"]
+
+        dep = Promiscuous::AMQP::Fake.get_next_payload['dependencies']
+        dep['read'].should  == nil
         dep['write'].should == hashed["publisher_models/id/#{pub.id}:1"]
 
         dep = Promiscuous::AMQP::Fake.get_next_payload['dependencies']
         dep['read'].should  == nil
         dep['write'].should == hashed["publisher_models/id/#{pub.id}:2"]
-
-        dep = Promiscuous::AMQP::Fake.get_next_payload['dependencies']
-        dep['read'].should  == nil
-        dep['write'].should == hashed["publisher_models/id/#{pub.id}:3"]
       end
     end
 
@@ -46,7 +46,7 @@ require 'spec_helper'
 
         dep = Promiscuous::AMQP::Fake.get_next_payload['dependencies']
         dep['read'].should  == nil
-        dep['write'].should == hashed["publisher_models/id/#{pub1.id}:1"]
+        dep['write'].should == hashed["publisher_models/id/#{pub1.id}:0"]
 
         pub2 = Promiscuous.context do
           PublisherModel.first
@@ -55,7 +55,7 @@ require 'spec_helper'
 
         dep = Promiscuous::AMQP::Fake.get_next_payload['dependencies']
         dep['read'].should  == hashed["publisher_models/id/#{pub1.id}:1"]
-        dep['write'].should == hashed["publisher_models/id/#{pub2.id}:1"]
+        dep['write'].should == hashed["publisher_models/id/#{pub2.id}:0"]
       end
     end
 
@@ -65,7 +65,7 @@ require 'spec_helper'
 
         dep = Promiscuous::AMQP::Fake.get_next_payload['dependencies']
         dep['read'].should  == nil
-        dep['write'].should == hashed["publisher_models/id/#{pub.id}:1"]
+        dep['write'].should == hashed["publisher_models/id/#{pub.id}:0"]
       end
     end
 
@@ -107,26 +107,26 @@ require 'spec_helper'
 
         dep = Promiscuous::AMQP::Fake.get_next_payload['dependencies']
         dep['read'].should  == nil
-        dep['write'].should =~ hashed["publisher_models/id/#{pub.id}:1",
-                                      "publisher_models/field_1/123:1",
-                                      "publisher_models/field_2/456:1"]
+        dep['write'].should =~ hashed["publisher_models/id/#{pub.id}:0",
+                                      "publisher_models/field_1/123:0",
+                                      "publisher_models/field_2/456:0"]
 
         dep = Promiscuous::AMQP::Fake.get_next_payload['dependencies']
         dep['read'].should  =~ hashed["publisher_models/field_1/blah:0",
                                       "publisher_models/field_2/blah:0"]
-        dep['write'].should =~ hashed["publisher_models/id/#{pub.id}:2",
-                                      "publisher_models/field_1/123:2",
-                                      # FIXME "publisher_models/field_1/blah:3",
-                                      "publisher_models/field_2/456:2"]
+        dep['write'].should =~ hashed["publisher_models/id/#{pub.id}:1",
+                                      "publisher_models/field_1/123:1",
+                                      # FIXME "publisher_models/field_1/blah:2",
+                                      "publisher_models/field_2/456:1"]
 
         dep = Promiscuous::AMQP::Fake.get_next_payload['dependencies']
         # We include the set dependency because we want to track the fact
         # that that document was not there.
         dep['read'].should  == hashed["publisher_models/field_1/123:2"]
-        dep['write'].should =~ hashed["publisher_models/id/#{pub.id}:3",
-                                      "publisher_models/field_1/blah:2",
-                                      "publisher_models/field_2/456:3"]
-                                      # FIXME "publisher_models/field_2/blah:1",
+        dep['write'].should =~ hashed["publisher_models/id/#{pub.id}:2",
+                                      "publisher_models/field_1/blah:1",
+                                      "publisher_models/field_2/456:2"]
+                                      # FIXME "publisher_models/field_2/blah:0",
       end
     end
 
@@ -145,18 +145,18 @@ require 'spec_helper'
         dep = Promiscuous::AMQP::Fake.get_next_payload['dependencies']
         dep['read'].should  == nil
 
-        dep['write'].should == hashed["publisher_models/id/#{pub1.id}:1",
-                                      "publisher_models/field_1/123:1"]
+        dep['write'].should == hashed["publisher_models/id/#{pub1.id}:0",
+                                      "publisher_models/field_1/123:0"]
 
         dep = Promiscuous::AMQP::Fake.get_next_payload['dependencies']
         dep['read'].should  == hashed["publisher_models/id/#{pub1.id}:1"]
-        dep['write'].should == hashed["publisher_models/id/#{pub2.id}:1",
-                                      "publisher_models/field_1/123:2"]
+        dep['write'].should == hashed["publisher_models/id/#{pub2.id}:0",
+                                      "publisher_models/field_1/123:1"]
 
         dep = Promiscuous::AMQP::Fake.get_next_payload['dependencies']
         dep['read'].should  == hashed["publisher_models/id/#{pub2.id}:1"]
-        dep['write'].should == hashed["publisher_models/id/#{pub1.id}:3",
-                                      "publisher_models/field_1/123:3"]
+        dep['write'].should == hashed["publisher_models/id/#{pub1.id}:2",
+                                      "publisher_models/field_1/123:2"]
       end
     end
 
@@ -171,7 +171,7 @@ require 'spec_helper'
 
         dep = Promiscuous::AMQP::Fake.get_next_payload['dependencies']
         dep['read'].should  == nil
-        dep['write'].should == hashed["publisher_models/id/#{pub.id}:1"]
+        dep['write'].should == hashed["publisher_models/id/#{pub.id}:0"]
       end
     end
 
@@ -189,11 +189,11 @@ require 'spec_helper'
 
         dep = Promiscuous::AMQP::Fake.get_next_payload['dependencies']
         dep['read'].should  == nil
-        dep['write'].should == hashed["publisher_models/id/#{pub1.id}:1"]
+        dep['write'].should == hashed["publisher_models/id/#{pub1.id}:0"]
 
         dep = Promiscuous::AMQP::Fake.get_next_payload['dependencies']
         dep['read'].should  == hashed["publisher_models/id/#{pub1.id}:1"]
-        dep['write'].should == hashed["publisher_models/id/#{pub2.id}:1"]
+        dep['write'].should == hashed["publisher_models/id/#{pub2.id}:0"]
       end
     end
 
@@ -208,11 +208,11 @@ require 'spec_helper'
 
         dep = Promiscuous::AMQP::Fake.get_next_payload['dependencies']
         dep['read'].should  == nil
-        dep['write'].should == hashed["publisher_models/id/#{pub.id}:1"]
+        dep['write'].should == hashed["publisher_models/id/#{pub.id}:0"]
 
         dep = Promiscuous::AMQP::Fake.get_next_payload['dependencies']
         dep['read'].should  == nil
-        dep['write'].should == hashed["publisher_models/id/#{pub.id}:2"]
+        dep['write'].should == hashed["publisher_models/id/#{pub.id}:1"]
 
         Promiscuous::AMQP::Fake.get_next_message.should == nil
       end
@@ -234,8 +234,8 @@ require 'spec_helper'
 
         dep = Promiscuous::AMQP::Fake.get_next_payload['dependencies']
         dep['read'].should  == hashed["publisher_models/field_1/123:0"]
-        dep['write'].should == hashed["publisher_models/id/#{pub.id}:1",
-                                      "publisher_models/field_1/456:1"]
+        dep['write'].should == hashed["publisher_models/id/#{pub.id}:0",
+                                      "publisher_models/field_1/456:0"]
       end
     end
 
@@ -259,7 +259,7 @@ require 'spec_helper'
 
           dep = Promiscuous::AMQP::Fake.get_next_payload['dependencies']
           dep['read'].should  =~ hashed["publisher_models/field_1/123:0"]
-          dep['write'].should == hashed["publisher_models/id/#{pub4.id}:1"]
+          dep['write'].should == hashed["publisher_models/id/#{pub4.id}:0"]
         end
       end
 
@@ -282,7 +282,7 @@ require 'spec_helper'
           dep['read'].should  =~ hashed["publisher_models/id/#{pub1.id}:0",
                                         "publisher_models/id/#{pub3.id}:0",
                                         "publisher_models/id/#{pub2.id}:0"]
-          dep['write'].should == hashed["publisher_models/id/#{pub4.id}:1"]
+          dep['write'].should == hashed["publisher_models/id/#{pub4.id}:0"]
         end
       end
     end
@@ -303,15 +303,15 @@ require 'spec_helper'
 
         dep = Promiscuous::AMQP::Fake.get_next_payload['dependencies']
         dep['read'].should == nil
+        dep['write'].should == ["0:0"]
+
+        dep = Promiscuous::AMQP::Fake.get_next_payload['dependencies']
+        dep['read'].should == nil
         dep['write'].should == ["0:1"]
 
         dep = Promiscuous::AMQP::Fake.get_next_payload['dependencies']
         dep['read'].should == nil
         dep['write'].should == ["0:2"]
-
-        dep = Promiscuous::AMQP::Fake.get_next_payload['dependencies']
-        dep['read'].should == nil
-        dep['write'].should == ["0:3"]
       end
     end
 

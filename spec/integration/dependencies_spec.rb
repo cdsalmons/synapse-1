@@ -106,7 +106,7 @@ describe Promiscuous do
         pub.update_attributes(:field_1 => '/')
         eventually { SubscriberModel.first.field_1.should == '/' }
 
-        pub_dep = pub.promiscuous.tracked_dependencies.first.tap { |d| d.version = 123 }
+        pub_dep = pub.promiscuous.tracked_dependencies.first.tap { |d| d.version_pass1 = d.version_pass2 = 123 }
         sub_dep = Promiscuous::Dependency.new(pub_dep.internal_key, :owner => 'test')
         sub_dep.redis_node.get(sub_dep.key(:sub).join('rw').to_s).to_i.should == 4
       end
@@ -125,7 +125,7 @@ describe Promiscuous do
         pub.update_attributes(:field_1 => ':')
         eventually { SubscriberModel.first.field_1.should == ':' }
 
-        pub_dep = pub.promiscuous.tracked_dependencies.first.tap { |d| d.version = 123 }
+        pub_dep = pub.promiscuous.tracked_dependencies.first.tap { |d| d.version_pass1 = d.version_pass2 = 123 }
         sub_dep = Promiscuous::Dependency.new(pub_dep.internal_key, :owner => 'test')
         sub_dep.redis_node.get(sub_dep.key(:sub).join('rw').to_s).to_i.should == 4
       end

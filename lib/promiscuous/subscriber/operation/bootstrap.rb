@@ -8,8 +8,10 @@ class Promiscuous::Subscriber::Operation::Bootstrap < Promiscuous::Subscriber::O
   def bootstrap_versions
     operations = message.parsed_payload['operations']
 
-    operations.map { |op| op['keys'] }.flatten.map { |k| Promiscuous::Dependency.parse(k, :owner => message.app) }.group_by(&:redis_node).each do |node, deps|
-      node.mset(deps.map { |dep| [dep.key(:sub).join('rw').to_s, dep.version] }.flatten)
+    operations.map { |op| op['keys'] }.flatten
+      .map { |k| Promiscuous::Dependency.parse(k, :owner => message.app) }
+      .group_by(&:redis_node).each do |node, deps|
+        node.mset(deps.map { |dep| [dep.key(:sub).join('rw').to_s, dep.version_pass2] }.flatten)
     end
   end
 
@@ -45,12 +47,6 @@ class Promiscuous::Subscriber::Operation::Bootstrap < Promiscuous::Subscriber::O
       # TODO unbind the bootstrap exchange
     else
       raise "Invalid operation received: #{operation}"
-    end
-  rescue Exception => e
-    if Promiscuous::Config.ignore_exceptions
-      Promiscuous.warn "[receive] error while proceessing message but message still processed: #{e}\n#{e.backtrace.join("\n")}"
-    else
-      raise e
     end
   end
 

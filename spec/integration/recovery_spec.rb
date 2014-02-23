@@ -51,7 +51,7 @@ describe Promiscuous do
       payload = Promiscuous::AMQP::Fake.get_next_payload
       dep = payload['dependencies']
       dep['read'].should  == nil
-      dep['write'].should == hashed["publisher_models/id/#{pub.id}:2"]
+      dep['write'].should == hashed["publisher_models/id/#{pub.id}:1"]
       op = payload['operations'].first
       op['id'].should == pub.id.to_s
       op['operation'].should == 'update'
@@ -69,7 +69,7 @@ describe Promiscuous do
 
       # Raising on version= will simulate a failure right after the master node
       # access.
-      stub_once_on(Promiscuous::Dependency, :version=) { raise }
+      stub_once_on(Promiscuous::Dependency, :version_pass1=) { raise }
       expect { Promiscuous.context do
         NUM_DEPS.times.map { |i| PublisherModel.where(:field_2 => i.to_s).count }
         pub.update_attributes(:field_1 => '1')
@@ -80,7 +80,7 @@ describe Promiscuous do
       payload = Promiscuous::AMQP::Fake.get_next_payload
       dep = payload['dependencies']
       dep['read'].should  =~ hashed[*NUM_DEPS.times.map { |i| "publisher_models/field_2/#{i}:0" }]
-      dep['write'].should =~ hashed["publisher_models/id/#{pub.id}:2", "publisher_models/field_2/hello:2"]
+      dep['write'].should =~ hashed["publisher_models/id/#{pub.id}:1", "publisher_models/field_2/hello:1"]
 
       op = payload['operations'].first
       op['id'].should == pub.id.to_s
@@ -107,7 +107,7 @@ describe Promiscuous do
         payload = Promiscuous::AMQP::Fake.get_next_payload
         dep = payload['dependencies']
         dep['read'].should  == nil
-        dep['write'].should == hashed["publisher_models/id/#{pub.id}:1"]
+        dep['write'].should == hashed["publisher_models/id/#{pub.id}:0"]
         op = payload['operations'].first
         op['id'].should == pub.id.to_s
         op['operation'].should == 'create'
@@ -130,7 +130,7 @@ describe Promiscuous do
         payload = Promiscuous::AMQP::Fake.get_next_payload
         dep = payload['dependencies']
         dep['read'].should  == nil
-        dep['write'].should == hashed["publisher_models/id/#{pub.id}:2"]
+        dep['write'].should == hashed["publisher_models/id/#{pub.id}:1"]
         op = payload['operations'].first
         op['id'].should == pub.id.to_s
         op['operation'].should == 'update'
@@ -143,7 +143,7 @@ describe Promiscuous do
         payload = Promiscuous::AMQP::Fake.get_next_payload
         dep = payload['dependencies']
         dep['read'].should  == nil
-        dep['write'].should == hashed["publisher_models/id/#{pub.id}:3"]
+        dep['write'].should == hashed["publisher_models/id/#{pub.id}:2"]
         op = payload['operations'].first
         op['id'].should == pub.id.to_s
         op['operation'].should == 'update'
@@ -172,7 +172,7 @@ describe Promiscuous do
           payload = Promiscuous::AMQP::Fake.get_next_payload
           dep = payload['dependencies']
           dep['read'].should  == nil
-          dep['write'].should == hashed["publisher_models/id/#{pub.id}:2"]
+          dep['write'].should == hashed["publisher_models/id/#{pub.id}:1"]
           payload['operations'].count.should == 0
         end
       end
@@ -193,7 +193,7 @@ describe Promiscuous do
         payload = Promiscuous::AMQP::Fake.get_next_payload
         dep = payload['dependencies']
         dep['read'].should  == nil
-        dep['write'].should == hashed["publisher_models/id/#{pub.id}:2"]
+        dep['write'].should == hashed["publisher_models/id/#{pub.id}:1"]
         op = payload['operations'].first
         op['id'].should == pub.id.to_s
         op['operation'].should == 'destroy'
@@ -221,7 +221,7 @@ describe Promiscuous do
         payload = Promiscuous::AMQP::Fake.get_next_payload
         dep = payload['dependencies']
         dep['read'].should  == nil
-        dep['write'].should == hashed["publisher_models/id/#{pub.id}:1"]
+        dep['write'].should == hashed["publisher_models/id/#{pub.id}:0"]
         op = payload['operations'].first
         op['id'].should == pub.id.to_s
         op['operation'].should == 'create'
@@ -230,7 +230,7 @@ describe Promiscuous do
         payload = Promiscuous::AMQP::Fake.get_next_payload
         dep = payload['dependencies']
         dep['read'].should  == nil
-        dep['write'].should == hashed["publisher_models/id/#{pub.id}:2"]
+        dep['write'].should == hashed["publisher_models/id/#{pub.id}:1"]
         op = payload['operations'].first
         op['id'].should == pub.id.to_s
         op['operation'].should == 'update'
@@ -253,7 +253,7 @@ describe Promiscuous do
         payload = Promiscuous::AMQP::Fake.get_next_payload
         dep = payload['dependencies']
         dep['read'].should  == nil
-        dep['write'].should == hashed["publisher_models/id/#{pub.id}:2"]
+        dep['write'].should == hashed["publisher_models/id/#{pub.id}:1"]
         op = payload['operations'].first
         op['id'].should == pub.id.to_s
         op['operation'].should == 'update'
@@ -267,7 +267,7 @@ describe Promiscuous do
         payload = Promiscuous::AMQP::Fake.get_next_payload
         dep = payload['dependencies']
         dep['read'].should  == nil
-        dep['write'].should == hashed["publisher_models/id/#{pub.id}:3"]
+        dep['write'].should == hashed["publisher_models/id/#{pub.id}:2"]
         op = payload['operations'].first
         op['id'].should == pub.id.to_s
         op['operation'].should == 'update'
@@ -292,7 +292,7 @@ describe Promiscuous do
         payload = Promiscuous::AMQP::Fake.get_next_payload
         dep = payload['dependencies']
         dep['read'].should  == nil
-        dep['write'].should == hashed["publisher_models/id/#{pub.id}:2"]
+        dep['write'].should == hashed["publisher_models/id/#{pub.id}:1"]
         op = payload['operations'].first
         op['id'].should == pub.id.to_s
         op['operation'].should == 'destroy'
@@ -316,7 +316,7 @@ describe Promiscuous do
         payload = Promiscuous::AMQP::Fake.get_next_payload
         dep = payload['dependencies']
         dep['read'].should  == nil
-        dep['write'].should == hashed["publisher_models/id/#{pub.id}:1"]
+        dep['write'].should == hashed["publisher_models/id/#{pub.id}:0"]
         op = payload['operations'].first
         op['id'].should == pub.id.to_s
         op['operation'].should == 'create'
@@ -325,7 +325,7 @@ describe Promiscuous do
         payload = Promiscuous::AMQP::Fake.get_next_payload
         dep = payload['dependencies']
         dep['read'].should  == nil
-        dep['write'].should == hashed["publisher_models/id/#{pub.id}:2"]
+        dep['write'].should == hashed["publisher_models/id/#{pub.id}:1"]
         op = payload['operations'].first
         op['id'].should == pub.id.to_s
         op['operation'].should == 'update'
@@ -348,7 +348,7 @@ describe Promiscuous do
         payload = Promiscuous::AMQP::Fake.get_next_payload
         dep = payload['dependencies']
         dep['read'].should  == nil
-        dep['write'].should == hashed["publisher_models/id/#{pub.id}:2"]
+        dep['write'].should == hashed["publisher_models/id/#{pub.id}:1"]
         op = payload['operations'].first
         op['id'].should == pub.id.to_s
         op['operation'].should == 'update'
@@ -357,7 +357,7 @@ describe Promiscuous do
         payload = Promiscuous::AMQP::Fake.get_next_payload
         dep = payload['dependencies']
         dep['read'].should  == nil
-        dep['write'].should == hashed["publisher_models/id/#{pub.id}:3"]
+        dep['write'].should == hashed["publisher_models/id/#{pub.id}:2"]
         op = payload['operations'].first
         op['id'].should == pub.id.to_s
         op['operation'].should == 'update'
@@ -378,7 +378,7 @@ describe Promiscuous do
         payload = Promiscuous::AMQP::Fake.get_next_payload
         dep = payload['dependencies']
         dep['read'].should  == nil
-        dep['write'].should == hashed["publisher_models/id/#{pub.id}:2"]
+        dep['write'].should == hashed["publisher_models/id/#{pub.id}:1"]
         op = payload['operations'].first
         op['id'].should == pub.id.to_s
         op['operation'].should == 'destroy'
@@ -420,7 +420,7 @@ describe Promiscuous do
         payload = JSON.parse(message[:payload])
         dep = payload['dependencies']
         dep['read'].should  == nil
-        dep['write'].should == hashed["publisher_models/id/#{pub.id}:1"]
+        dep['write'].should == hashed["publisher_models/id/#{pub.id}:0"]
         op = payload['operations'].first
         op['id'].should == pub.id.to_s
         op['operation'].should == 'create'
@@ -453,7 +453,7 @@ describe Promiscuous do
         payload = JSON.parse(message[:payload])
         dep = payload['dependencies']
         dep['read'].should  == nil
-        dep['write'].should == hashed["publisher_models/id/#{pub.id}:2"]
+        dep['write'].should == hashed["publisher_models/id/#{pub.id}:1"]
         op = payload['operations'].first
         op['id'].should == pub.id.to_s
         op['operation'].should == 'update'
@@ -467,7 +467,7 @@ describe Promiscuous do
         payload = JSON.parse(message[:payload])
         dep = payload['dependencies']
         dep['read'].should  == nil
-        dep['write'].should == hashed["publisher_models/id/#{pub.id}:3"]
+        dep['write'].should == hashed["publisher_models/id/#{pub.id}:2"]
         op = payload['operations'].first
         op['id'].should == pub.id.to_s
         op['operation'].should == 'update'
@@ -485,7 +485,7 @@ describe Promiscuous do
         payload = Promiscuous::AMQP::Fake.get_next_payload
         dep = payload['dependencies']
         dep['read'].should  == nil
-        dep['write'].should == hashed["publisher_models/id/#{pub.id}:1"]
+        dep['write'].should == hashed["publisher_models/id/#{pub.id}:0"]
         op = payload['operations'].first
         op['id'].should == pub.id.to_s
         op['operation'].should == 'update'
@@ -506,7 +506,7 @@ describe Promiscuous do
         payload = Promiscuous::AMQP::Fake.get_next_payload
         dep = payload['dependencies']
         dep['read'].should  == nil
-        dep['write'].should == hashed["model_ephemerals/id/none:1"]
+        dep['write'].should == hashed["model_ephemerals/id/none:0"]
 
         payload['operations'].size.should == 0
       end
