@@ -368,7 +368,8 @@ class Promiscuous::Publisher::Operation::Base
 
   def get_new_op_lock
     dep = dependency_for_op_lock
-    Promiscuous::Redis::Mutex.new(dep.key(:pub).to_s, lock_options.merge(:node => dep.redis_node))
+    Promiscuous::Redis::Mutex.new(dep.key(:pub, :dont_hash => true).to_s,
+                                  lock_options.merge(:node => dep.redis_node))
   end
 
   def self._acquire_lock(mutex)

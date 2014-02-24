@@ -14,7 +14,7 @@ class Promiscuous::Publisher::Operation::Transaction < Promiscuous::Publisher::O
     # until the transaction is committed.
     # A lock on the transaction ID is taken so we know when we conflict with
     # the recovery mechanism.
-    Promiscuous::Dependency.new("__transactions__", self.transaction_id, :dont_hash => true)
+    Promiscuous::Dependency.new("__transactions__", self.transaction_id)
   end
 
   def pending_writes

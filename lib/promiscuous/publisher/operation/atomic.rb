@@ -13,7 +13,7 @@ class Promiscuous::Publisher::Operation::Atomic < Promiscuous::Publisher::Operat
     end
 
     loop do
-      instance_dep = dependency_for_op_lock
+      instance_key = dependency_for_op_lock.orig_key
 
       super
 
@@ -27,7 +27,7 @@ class Promiscuous::Publisher::Operation::Atomic < Promiscuous::Publisher::Operat
       # If reload_instance changed the current instance because the selector,
       # we need to unlock the old instance, lock this new instance, and
       # retry.
-      return if instance_dep == dependency_for_op_lock
+      return if instance_key == dependency_for_op_lock.orig_key
 
       # XXX What should we do if we are going in a live lock?
       # Sleep with some jitter?

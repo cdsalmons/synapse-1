@@ -1,15 +1,14 @@
 require 'fnv'
 
 class Promiscuous::Dependency
-  attr_accessor :internal_key, :version_pass1, :version_pass2, :type
+  attr_accessor :orig_key, :internal_key, :version_pass1, :version_pass2, :type
 
   def initialize(*args)
     options = args.extract_options!
     @type = options[:type]
     @owner = options[:owner]
-    @dont_hash = options[:dont_hash]
 
-    @internal_key = args.join('/')
+    @orig_key = @internal_key = args.join('/')
 
     if @internal_key =~ /^[0-9]+$/
       @internal_key = @internal_key.to_i
@@ -22,7 +21,7 @@ class Promiscuous::Dependency
         # The hashing needs to be deterministic across instances in order to
         # function properly.
         @hash = @hash % Promiscuous::Config.hash_size.to_i
-        @internal_key = @hash unless @dont_hash
+        @internal_key = @hash
       end
     end
 
@@ -41,8 +40,9 @@ class Promiscuous::Dependency
     @type == :write
   end
 
-  def key(role)
-    Promiscuous::Key.new(role).join(@internal_key)
+  def key(role, options={})
+    k = options[:dont_hash] ? @orig_key : @internal_key
+    Promiscuous::Key.new(role).join(k)
   end
 
   def redis_node(distributed_redis=nil)
