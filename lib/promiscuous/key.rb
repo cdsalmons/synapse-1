@@ -11,8 +11,8 @@ class Promiscuous::Key
   def to_s
     path = []
     case @role
-    when :pub then path << 'publishers'
-    when :sub then path << 'subscribers'
+    when :pub then path << 'p'
+    when :sub then path << 's'
     end
     path << Promiscuous::Config.app
     path += @nodes.compact
