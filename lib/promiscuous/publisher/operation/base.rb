@@ -136,10 +136,14 @@ class Promiscuous::Publisher::Operation::Base
     # secondary_operation_recovery_key will never be cleaned up.
     (w+r).map(&:redis_node).uniq
       .reject { |node| node == master_node }
-      .each   do |node|
-        node.del(versions_pass1_recovery_key)
-        node.del(versions_pass2_recovery_key)
-      end
+      .map   do |node|
+        Promiscuous::Redis::Async.enqueue_work_for(node) do
+          node.pipelined do
+            node.del(versions_pass1_recovery_key)
+            node.del(versions_pass2_recovery_key)
+          end
+        end
+      end.each(&:value)
   end
 
   def payload_for(instance)
@@ -228,7 +232,7 @@ class Promiscuous::Publisher::Operation::Base
 
   def increment_read_and_write_dependencies_stub(num_pass, nodes_deps, operation_recovery_key,
                                                  inner_script, master_node, recovery_payload_json)
-    nodes_deps.each do |node, deps|
+    nodes_deps.map do |node, deps|
       argv = []
       argv << Promiscuous::Key.new(:pub) # key prefixes
       argv << operation_recovery_key
@@ -284,15 +288,17 @@ class Promiscuous::Publisher::Operation::Base
         return versions
       SCRIPT
 
-      versions = @@increment_script_pass[num_pass].eval(node, :argv => argv, :keys => deps_str)
+      Promiscuous::Redis::Async.enqueue_work_for(node) do
+        versions = @@increment_script_pass[num_pass].eval(node, :argv => argv, :keys => deps_str)
 
-      deps.zip(versions).each do |dep, version|
-        case num_pass
-        when 1 then dep.version_pass1 = version
-        when 2 then dep.version_pass2 = version
+        deps.zip(versions).each do |dep, version|
+          case num_pass
+          when 1 then dep.version_pass1 = version
+          when 2 then dep.version_pass2 = version
+          end
         end
       end
-    end
+    end.each(&:value)
   end
 
   def increment_read_and_write_dependencies

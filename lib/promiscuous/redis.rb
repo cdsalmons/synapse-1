@@ -3,7 +3,7 @@ require 'redis/distributed'
 
 module Promiscuous::Redis
   extend Promiscuous::Autoload
-  autoload :Mutex, :Script
+  autoload :Mutex, :Script, :Async
 
   def self.connect
     disconnect

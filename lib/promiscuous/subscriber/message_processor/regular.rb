@@ -131,10 +131,12 @@ class Promiscuous::Subscriber::MessageProcessor::Regular < Promiscuous::Subscrib
   end
 
   def update_dependencies_secondaries(options={})
-    secondary_nodes_with_deps.each do |node_with_deps|
-      update_dependencies_on_node(node_with_deps, options.merge(:with_recovery => true))
-      after_secondary_update_hook
-    end
+    secondary_nodes_with_deps.map do |node_with_deps|
+      Promiscuous::Redis::Async.enqueue_work_for(node_with_deps[0]) do
+        update_dependencies_on_node(node_with_deps, options.merge(:with_recovery => true))
+        after_secondary_update_hook
+      end
+    end.each(&:value)
   end
 
   def after_secondary_update_hook
@@ -142,9 +144,11 @@ class Promiscuous::Subscriber::MessageProcessor::Regular < Promiscuous::Subscrib
   end
 
   def cleanup_dependency_secondaries
-    secondary_nodes_with_deps.each do |node, deps|
-      node.del(recovery_key)
-    end
+    secondary_nodes_with_deps.map do |node, deps|
+      Promiscuous::Redis::Async.enqueue_work_for(node) do
+        node.del(recovery_key)
+      end
+    end.each(&:value)
   end
 
   def update_dependencies(options={})
