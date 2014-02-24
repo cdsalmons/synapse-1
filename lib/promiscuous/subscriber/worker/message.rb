@@ -65,7 +65,7 @@ class Promiscuous::Subscriber::Worker::Message
   end
 
   def to_s
-    "#{app}/#{context} -> #{happens_before_dependencies.join(', ')}"
+    "#{app}/#{context} -> #{parsed_payload['dependencies']}"
   end
 
   def ack

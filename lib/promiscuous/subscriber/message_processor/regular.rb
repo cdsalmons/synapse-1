@@ -40,6 +40,8 @@ class Promiscuous::Subscriber::MessageProcessor::Regular < Promiscuous::Subscrib
     argv << MultiJson.dump([deps.map { |dep| dep.key(:sub) },
                             deps.map { |dep| dep.version_pass2 + 1 }])
 
+    # TODO Do the pass2 pending version thingy.
+
     @@update_script_bootstrap ||= Promiscuous::Redis::Script.new <<-SCRIPT
       local _args = cjson.decode(ARGV[1])
       local write_deps = _args[1]
@@ -61,14 +63,15 @@ class Promiscuous::Subscriber::MessageProcessor::Regular < Promiscuous::Subscrib
 
   def update_dependencies_fast(node, deps, options={})
     keys = deps.map { |d| d.to_s(:raw => true) }
-    argv = []
-    argv << Promiscuous::Key.new(:sub)
+    argv = deps.map { |d| d.version_pass2 }
+    argv << Promiscuous::Key.new(:sub).to_s
     argv << recovery_key if options[:with_recovery]
 
     @@update_script_fast ||= Promiscuous::Redis::Script.new <<-SCRIPT
       local deps = KEYS
-      local prefix = ARGV[1] .. ':'
-      local recovery_key = ARGV[2]
+      local versions = ARGV
+      local prefix = ARGV[#deps+1] .. ':'
+      local recovery_key = ARGV[#deps+2]
 
       if recovery_key and redis.call('exists', recovery_key) == 1 then
         return
@@ -76,8 +79,25 @@ class Promiscuous::Subscriber::MessageProcessor::Regular < Promiscuous::Subscrib
 
       for i, _key in ipairs(deps) do
         local key = prefix .. _key .. ':rw'
-        local v = redis.call('incr', key)
-        redis.call('publish', key, v)
+        local pending_key = key .. ':pending'
+        local wanted_version = versions[i]
+        local current_version = tonumber(redis.call('get', key)) or 0
+        local queue_pending_version = true
+        local token = nil
+
+        while wanted_version and tonumber(wanted_version) <= current_version do
+          queue_pending_version = false
+          if token then redis.call('zrem', pending_key, token) end
+          current_version = redis.call('incr', key)
+          token, wanted_version = unpack(redis.call('zrange', pending_key, 0, 1, 'withscores'))
+        end
+
+        if queue_pending_version then
+          token = redis.call('incr', 'promiscuous:pending_version_token')
+          redis.call('zadd', pending_key, wanted_version, token)
+        else
+          redis.call('publish', key, current_version)
+        end
       end
 
       if recovery_key then

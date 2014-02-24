@@ -59,6 +59,12 @@ module Promiscuous::Publisher::Model::Ephemeral
     Hash[self.class.published_attrs.map { |attr| [attr, __send__(attr)] }]
   end
 
+  def read
+    op = Promiscuous::Publisher::Operation::NonPersistent
+      .new(:instances => [self], :operation => :read)
+    Promiscuous::Publisher::Context.current.read_operations << op
+  end
+
   module ClassMethods
     def publish(*args)
       super
