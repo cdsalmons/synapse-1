@@ -1,9 +1,10 @@
 class Promiscuous::Subscriber::Operation::Regular < Promiscuous::Subscriber::Operation::Base
   def execute
     case operation
-    when :create  then create  if model
-    when :update  then update  if model
-    when :destroy then destroy if model
+    when :create   then create   if model
+    when :update   then update   if model
+    when :destroy  then destroy  if model
+    when :decorate then decorate if model
     end
   end
 

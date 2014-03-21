@@ -4,7 +4,7 @@ describe Promiscuous do
   before { load_models }
   before { use_real_backend }
 
-  before { SubscriberModel.class_eval { subscribe :foreign_key => :publisher_id } }
+  before { SubscriberModel.class_eval { subscribe :foreign_key => :publisher_id, :as => 'PublisherModel', :from => :test } }
 
   before { run_subscriber_worker! }
 

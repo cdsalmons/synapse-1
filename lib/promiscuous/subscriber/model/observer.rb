@@ -35,9 +35,9 @@ module Promiscuous::Subscriber::Model::Observer
   end
 
   module ClassMethods
-    def subscribe(*args)
+    def register_klass(options={})
       super
-      subscribed_attrs.each do |attr|
+      options[:attributes].each do |attr|
         # TODO do not overwrite existing methods
         attr_accessor attr
       end

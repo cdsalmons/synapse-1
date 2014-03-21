@@ -98,6 +98,7 @@ class Promiscuous::Publisher::Operation::Base
     # TODO Optimize and DRY this up
     r = @committed_read_deps
     w = @committed_write_deps
+    e = @committed_external_deps
 
     # We identify a payload with a unique key (id:id_value:current_version:payload_recovery)
     # to avoid collisions with other updates on the same document.
@@ -134,7 +135,7 @@ class Promiscuous::Publisher::Operation::Base
     # secondary_operation_recovery_key is unique to the operation.
     # XXX The caveat is that if we die here, the
     # secondary_operation_recovery_key will never be cleaned up.
-    (w+r).map(&:redis_node).uniq
+    (w+r+e).map(&:redis_node).uniq
       .reject { |node| node == master_node }
       .map   do |node|
         Promiscuous::Redis::Async.enqueue_work_for(node) do
@@ -149,7 +150,11 @@ class Promiscuous::Publisher::Operation::Base
   def payload_for(instance)
     options = { :with_attributes => self.operation.in?([:create, :update]) }
     instance.promiscuous.payload(options).tap do |payload|
-      payload[:operation] = self.operation
+      if instance.class.include?(Promiscuous::Decorator)
+        payload[:operation] = :decorate
+      else
+        payload[:operation] = self.operation
+      end
     end
   end
 
@@ -165,8 +170,9 @@ class Promiscuous::Publisher::Operation::Base
     payload[:was_during_bootstrap] = true if @was_during_bootstrap
     payload[:recovered_operation] = true if recovering?
     payload[:dependencies] = {}
-    payload[:dependencies][:read]  = @committed_read_deps if @committed_read_deps.present?
-    payload[:dependencies][:write] = @committed_write_deps
+    payload[:dependencies][:read]     = @committed_read_deps if @committed_read_deps.present?
+    payload[:dependencies][:external] = @committed_external_deps if @committed_external_deps.present?
+    payload[:dependencies][:write]    = @committed_write_deps
 
     @payload = MultiJson.dump(payload)
   end
@@ -191,7 +197,7 @@ class Promiscuous::Publisher::Operation::Base
     Promiscuous.info "[operation recovery] #{lock.key} -> #{recovery_data}"
 
     op_klass, operation, read_dependencies,
-      write_dependencies, recovery_arguments = *MultiJson.load(recovery_data)
+      write_dependencies, external_dependencies, recovery_arguments = *MultiJson.load(recovery_data)
 
     operation = operation.to_sym
     read_dependencies.map!  { |k| Promiscuous::Dependency.parse(k.to_s, :type => :read) }
@@ -214,6 +220,7 @@ class Promiscuous::Publisher::Operation::Base
           @operation = operation
           @read_dependencies  = read_dependencies
           @write_dependencies = write_dependencies
+          @external_dependencies = external_dependencies
           @op_lock = lock
           @recovery_data = recovery_data
 
@@ -239,8 +246,11 @@ class Promiscuous::Publisher::Operation::Base
       # The index of the first write is then used to pass to redis along with the
       # dependencies. This is done because arguments to redis LUA scripts cannot
       # accept complex data types.
-      first_read_index = deps.index(&:read?) || deps.length
+      first_external_index = deps.index(&:external?) || deps.length
+      first_read_index = deps.index(&:read?) || first_external_index
+
       argv << first_read_index
+      argv << first_external_index
 
       # Each shard have their own recovery payload. The master recovery node
       # has the full operation recovery, and the others just have their versions.
@@ -251,7 +261,13 @@ class Promiscuous::Publisher::Operation::Base
         argv << recovery_payload_json
       end
 
-      deps_str = deps.map { |d| d.to_s(:raw => true) }
+      deps_str = deps.map do |d|
+        if d.external?
+          d.key(:sub).to_s
+        else
+          d.to_s(:raw => true)
+        end
+      end
 
       @@increment_script_pass ||= {}
       @@increment_script_pass[num_pass] ||= Promiscuous::Redis::Script.new <<-SCRIPT
@@ -259,7 +275,8 @@ class Promiscuous::Publisher::Operation::Base
         local operation_recovery_key = ARGV[2]
         local versions_recovery_key = operation_recovery_key .. ':versions_pass#{num_pass}'
         local first_read_index = tonumber(ARGV[3]) + 1
-        local operation_recovery_payload = ARGV[4]
+        local first_external_index = tonumber(ARGV[4]) + 1
+        local operation_recovery_payload = ARGV[5]
         local deps = KEYS
 
         local versions = {}
@@ -280,7 +297,6 @@ class Promiscuous::Publisher::Operation::Base
         end
 
         for i, dep in ipairs(deps) do
-          local key = prefix .. dep
           #{inner_script}
           redis.call('hset', versions_recovery_key, dep, versions[i])
         end
@@ -304,6 +320,7 @@ class Promiscuous::Publisher::Operation::Base
   def increment_read_and_write_dependencies
     r = read_dependencies
     w = write_dependencies
+    e = external_dependencies
 
     # We don't need to do a read dependency if we are writing to it, so we
     # prune them. The subscriber assumes the pruning (i.e. the intersection of
@@ -315,28 +332,35 @@ class Promiscuous::Publisher::Operation::Base
       r.each { |d| d.type = :write }
       w += r
       r = []
+      e = []
     end
 
     master_node = @op_lock.node
     operation_recovery_key = "#{@op_lock.key}:operation_recovery"
 
-    nodes_deps = (w+r).group_by(&:redis_node)
+    nodes_deps = (w+r+e).group_by(&:redis_node)
 
     unless self.recovering?
-      recovery_payload_json = MultiJson.dump([self.class.name, operation, r, w, self.recovery_payload])
+      recovery_payload_json = MultiJson.dump([self.class.name, operation, r, w, e, self.recovery_payload])
     end
 
     increment_read_and_write_dependencies_stub(1, nodes_deps, operation_recovery_key,
                                                <<-SCRIPT, master_node, recovery_payload_json)
+      local key = prefix .. dep
       if i < first_read_index then
         versions[i] = tonumber(redis.call('get', key .. ':rw')) or 0
-      else
+      elseif i < first_external_index then
         versions[i] = tonumber(redis.call('get', key .. ':w')) or 0
+      else
+        versions[i] = tonumber(redis.call('get', dep .. ':rw')) or 0
       end
     SCRIPT
 
+    # No external deps on the second pass
+    nodes_deps = (w+r).group_by(&:redis_node)
     increment_read_and_write_dependencies_stub(2, nodes_deps, operation_recovery_key,
                                                <<-SCRIPT, master_node, nil)
+      local key = prefix .. dep
       local rw_version = redis.call('incr', key .. ':rw')
       if i < first_read_index then
         redis.call('set', key .. ':w', rw_version)
@@ -346,10 +370,13 @@ class Promiscuous::Publisher::Operation::Base
       end
     SCRIPT
 
+    e.each { |d| d.version_pass2 = d.version_pass1 }
+
     # The instance version must to be the first in the list to allow atomic
     # subscribers to do their magic.
     @committed_write_deps = w
     @committed_read_deps = r
+    @committed_external_deps = e
   end
 
   def self.lock_options
@@ -423,6 +450,8 @@ class Promiscuous::Publisher::Operation::Base
   def dependencies_for(instance, options={})
     return [] if instance.nil?
 
+    ext = instance.promiscuous.external_dependencies
+
     if read?
       # We want to use the smallest subset that we can depend on when doing
       # reads. tracked_dependencies comes sorted from the smallest subset to
@@ -431,12 +460,12 @@ class Promiscuous::Publisher::Operation::Base
       # dependency.
       # If we don't have any, the driver should track individual instances.
       best_dependency = instance.promiscuous.tracked_dependencies(:allow_missing_attributes => true).first
-      [best_dependency].compact
+      [best_dependency].compact + ext
     else
       # Note that tracked_dependencies will not return the id dependency if it
       # doesn't exist which can only happen for create operations and auto
       # generated ids.
-      instance.promiscuous.tracked_dependencies
+      instance.promiscuous.tracked_dependencies + ext
     end
   end
 
@@ -453,12 +482,25 @@ class Promiscuous::Publisher::Operation::Base
       read_dependencies << dep
     end
 
-    @read_dependencies = read_dependencies.uniq.each { |d| d.type = :read }
+    @read_dependencies = read_dependencies.reject { |d| !!d.owner }.uniq.each { |d| d.type = :read }
   end
   alias generate_read_dependencies read_dependencies
 
   def write_dependencies
-    @write_dependencies ||= self.query_dependencies.uniq.each { |d| d.type = :write }
+    @write_dependencies ||= self.query_dependencies.reject { |d| !!d.owner }.uniq.each { |d| d.type = :write }
+  end
+
+  def external_dependencies
+    return @external_dependencies if @external_dependencies
+    ext_deps = current_context.read_operations.map(&:query_dependencies).flatten
+
+    current_context.extra_dependencies.each do |dep|
+      dep.version_pass1 = dep.version_pass2 = nil
+      ext_deps << dep
+    end
+
+    ext_deps += self.query_dependencies
+    @external_dependencies = ext_deps.select { |d| d.owner }.uniq
   end
 
   def should_instrument_query?

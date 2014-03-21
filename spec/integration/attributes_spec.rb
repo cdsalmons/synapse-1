@@ -7,7 +7,7 @@ describe Promiscuous do
 
   context 'using virtual attributes' do
     before do
-      class PublisherModel
+      PublisherModel.class_eval do
         publish :vattr, :use => :field_1
 
         def vattr
@@ -15,9 +15,10 @@ describe Promiscuous do
         end
       end
 
-      class SubscriberModel
+      SubscriberModel.class_eval do
         cattr_accessor :vattr_value
-        subscribe :vattr
+        subscribe :vattr, :from => :test, :as => 'PublisherModel'
+
 
         def vattr=(value)
           self.class.vattr_value = value

@@ -1,6 +1,7 @@
 module BackendHelper
   NUM_SHARDS = 8
-  HASH_SIZE = 2**30
+  # HASH_SIZE = 2**30
+  HASH_SIZE = 0
 
   def reconfigure_backend(&block)
     Promiscuous.configure do |config|

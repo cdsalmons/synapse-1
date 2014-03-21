@@ -55,7 +55,7 @@ describe Promiscuous do
         define_constant :Subscriber do
           include Mongoid::Document
           include Promiscuous::Subscriber
-          subscribe(:as => :Publisher) { field :field }
+          subscribe(:as => :Publisher, :from => :test) { field :field }
           field :inc_by_one
           before_update { inc(:inc_by_one, 1) if field == field_was + 1 }
         end

@@ -3,10 +3,11 @@ module Promiscuous::Publisher::Model::Base
 
   included do
     class_attribute :published_attrs, :tracked_attrs
-    cattr_accessor  :published_db_fields # There is one on each root class, none on the subclasses
+    cattr_accessor  :published_db_fields, :promiscuous_root_class # There is one on each root class, none on the subclasses
     self.published_attrs = []
     self.tracked_attrs = []
     self.published_db_fields = []
+    self.promiscuous_root_class = self
     track_dependencies_of :id
     Promiscuous::Publisher::Model.publishers[self.promiscuous_collection_name] = self
   end
@@ -58,6 +59,11 @@ module Promiscuous::Publisher::Model::Base
       end
       .map { |attr, value| get_dependency(attr, value) }
       .compact
+    end
+
+    def external_dependencies
+      # Overriden by lib/promiscuous/decorator.rb
+      []
     end
   end
 

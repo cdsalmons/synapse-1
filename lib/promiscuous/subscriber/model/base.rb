@@ -20,7 +20,7 @@ module Promiscuous::Subscriber::Model::Base
   end
 
   def __promiscuous_update(payload, options={})
-    self.class.subscribed_attrs.map(&:to_s).each do |attr|
+    payload.routed_attributes.map(&:to_s).each do |attr|
       unless payload.attributes.has_key?(attr)
         "Attribute '#{attr}' is missing from the payload".tap do |error_msg|
           Promiscuous.warn "[receive] #{error_msg}"
@@ -53,11 +53,9 @@ module Promiscuous::Subscriber::Model::Base
   end
 
   included do
-    class_attribute :promiscuous_root_class
-    class_attribute :subscribe_from, :subscribe_foreign_key, :subscribed_attrs
+    class_attribute :promiscuous_root_class, :subscribe_foreign_key
     self.promiscuous_root_class = self
     self.subscribe_foreign_key = :id
-    self.subscribed_attrs = []
   end
 
   module ClassMethods
@@ -68,30 +66,36 @@ module Promiscuous::Subscriber::Model::Base
       # TODO reject invalid options
 
       self.subscribe_foreign_key = options[:foreign_key] if options[:foreign_key]
-
-      ([self] + descendants).each { |klass| klass.subscribed_attrs |= attributes }
-
-      if self.subscribe_from && options[:from] && self.subscribe_from != options[:from]
-        raise 'Subscribing from different publishers is not supported yet'
-      end
-
-      self.subscribe_from ||= options[:from].try(:to_s) || "*"
-
-      self.register_klass(options)
+      register_klass(options.merge(:attributes => attributes))
     end
 
     def register_klass(options={})
-      subscribe_as = options[:as].try(:to_s) || self.name
-      return unless subscribe_as
+      from = options[:from].try(:to_s)
+      raise "You must specify the publisher with :from" unless from
+      attributes = options[:attributes]
 
-      Promiscuous::Subscriber::Model.mapping[self.subscribe_from] ||= {}
-      Promiscuous::Subscriber::Model.mapping[self.subscribe_from][subscribe_as] = self
+      Promiscuous::Subscriber::Model.mapping[from] ||= {}
+      ([self] + descendants).each do |klass|
+        as = options[:as].try(:to_s) || klass.name
+        defs = Promiscuous::Subscriber::Model.mapping[from]
+        defs[as] ||= {:attributes => []}
+        defs[as][:model] = self
+        defs[as][:attributes] += attributes
+        defs[as][:parent_collection] = options[:parent_collection] if options[:parent_collection]
+      end
     end
 
     def inherited(subclass)
       super
-      subclass.subscribed_attrs = self.subscribed_attrs.dup
-      subclass.register_klass
+
+      Promiscuous::Subscriber::Model.mapping.each do |from, _as|
+        _as.each do |as, defs|
+          if defs[:model] == self && as == self.name
+            _as[subclass.name] = defs.merge(:model => subclass)
+          end
+        end
+
+      end
     end
 
     class None; end

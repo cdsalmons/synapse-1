@@ -1,5 +1,5 @@
 class Promiscuous::Subscriber::Operation::Base
-  attr_accessor :model, :id, :operation, :attributes
+  attr_accessor :model, :id, :operation, :attributes, :routed_attributes
   delegate :message, :to => :message_processor
 
   def initialize(payload)
@@ -7,16 +7,21 @@ class Promiscuous::Subscriber::Operation::Base
       self.id         = payload['id']
       self.operation  = payload['operation'].try(:to_sym)
       self.attributes = payload['attributes']
-      self.model      = self.get_subscribed_model(payload) if payload['types']
+      if payload['types']
+        if route = self.get_route(payload)
+          self.model = route[:model]
+          self.routed_attributes = route[:attributes]
+        end
+      end
     end
   end
 
-  def get_subscribed_model(payload)
+  def get_route(payload)
     [message.app, '*'].each do |app|
       app_mapping = Promiscuous::Subscriber::Model.mapping[app] || {}
       payload['types'].to_a.each do |ancestor|
-        model = app_mapping[ancestor]
-        return model if model
+        route = app_mapping[ancestor]
+        return route if route
       end
     end
     nil
@@ -48,8 +53,16 @@ class Promiscuous::Subscriber::Operation::Base
       end
     end
   rescue model.__promiscuous_missing_record_exception
-    warn "upserting"
-    create :on_already_created => proc { update(false) if should_create_on_failure }
+    if should_create_on_failure
+      warn "upserting"
+      create :on_already_created => proc { update(false) if should_create_on_failure }
+    else
+      warn "missing record"
+    end
+  end
+
+  def decorate
+    update(false)
   end
 
   def destroy

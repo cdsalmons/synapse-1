@@ -32,17 +32,17 @@ module ModelsHelper
 
     define_constant :SubscriberModel, ActiveRecord::Base do
       include Promiscuous::Subscriber
-      subscribe :field_1, :field_2, :field_3, :as => :PublisherModel
+      subscribe :field_1, :field_2, :field_3, :as => :PublisherModel, :from => :test
     end
 
     define_constant :SubscriberModelOther, ActiveRecord::Base do
       include Promiscuous::Subscriber
-      subscribe :field_1, :field_2, :field_3, :as => :PublisherModelOther
+      subscribe :field_1, :field_2, :field_3, :as => :PublisherModelOther, :from => :test
     end
 
     define_constant :SubscriberModelChild, SubscriberModel do
-      subscribe :as => :SubscriberModelChild
-      subscribe :child_field_1, :child_field_2, :child_field_3
+      subscribe :child_field_1, :child_field_2, :child_field_3,
+                :as => :SubscriberModelChild, :from => :test
     end
 
     define_constant :'Scoped::ScopedSubscriberModel', SubscriberModel do
@@ -54,8 +54,7 @@ module ModelsHelper
     define_constant :SubscriberModelBelongsTo, ActiveRecord::Base do
       include Promiscuous::Subscriber
 
-      subscribe :as => :PublisherModelBelongsTo
-      subscribe :publisher_model_id
+      subscribe :publisher_model_id, :as => :PublisherModelBelongsTo, :from => :test
     end
   end
 end

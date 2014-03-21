@@ -125,14 +125,14 @@ module ModelsHelper
 
       field :publisher_id, :type => BSON::ObjectId
 
-      subscribe :field_1, :field_2, :field_3, :as => :PublisherModel
+      subscribe :field_1, :field_2, :field_3, :as => :PublisherModel, :from => :test
     end
 
     define_constant :SubscriberModelOther do
       include Mongoid::Document
       include Promiscuous::Subscriber
 
-      subscribe :as => :PublisherModelOther do
+      subscribe :as => :PublisherModelOther, :from => :test do
         field :field_1
         field :field_2
         field :field_3
@@ -144,8 +144,9 @@ module ModelsHelper
       field :child_field_2
       field :child_field_3
 
-      subscribe :as => :PublisherModelChild
-      subscribe :child_field_1, :child_field_2, :child_field_3
+      subscribe :child_field_1, :child_field_2, :child_field_3,
+                :field_1, :field_2, :field_3,
+                :as => :PublisherModelChild, :from => :test
     end
 
     define_constant :SubscriberModelAnotherChild, SubscriberModel do
@@ -153,8 +154,10 @@ module ModelsHelper
       field :another_child_field_2
       field :another_child_field_3
 
-      subscribe :as => :PublisherModelAnotherChild
-      subscribe :another_child_field_1, :another_child_field_2, :another_child_field_3
+      subscribe :another_child_field_1, :another_child_field_2, :another_child_field_3,
+                :child_field_1, :child_field_2, :child_field_3,
+                :field_1, :field_2, :field_3,
+                :as => :PublisherModelAnotherChild, :from => :test
     end
 
     define_constant :SubscriberModelEmbedded do
@@ -166,8 +169,8 @@ module ModelsHelper
       field :embedded_field_2
       field :embedded_field_3
 
-      subscribe :as => :PublisherModelEmbedded
-      subscribe :embedded_field_1, :embedded_field_2, :embedded_field_3
+      subscribe :embedded_field_1, :embedded_field_2, :embedded_field_3,
+                :as => :PublisherModelEmbedded, :from => :test
     end
 
     define_constant :SubscriberModelEmbeddedChild, SubscriberModelEmbedded do
@@ -176,8 +179,9 @@ module ModelsHelper
       field :child_embedded_field_2
       field :child_embedded_field_3
 
-      subscribe :as => :PublisherModelEmbeddedChild
-      subscribe :embedded_field_1, :embedded_field_2, :embedded_field_3
+      subscribe :embedded_field_1, :embedded_field_2, :embedded_field_3,
+                :child_embedded_field_1, :child_embedded_field_2, :child_embedded_field_3,
+                :as => :PublisherModelEmbeddedChild, :from => :test
     end
 
     define_constant :SubscriberModelEmbed do
@@ -190,8 +194,8 @@ module ModelsHelper
       field :field_2
       field :field_3
 
-      subscribe :as => :PublisherModelEmbed
-      subscribe :field_1, :field_2, :field_3, :model_embedded
+      subscribe :field_1, :field_2, :field_3, :model_embedded,
+                :as => :PublisherModelEmbed, :from => :test
     end
 
     define_constant :SubscriberModelEmbedMany do
@@ -204,8 +208,8 @@ module ModelsHelper
       field :field_2
       field :field_3
 
-      subscribe :as => :PublisherModelEmbedMany
-      subscribe :field_1, :field_2, :field_3, :models_embedded
+      subscribe :field_1, :field_2, :field_3, :models_embedded,
+                :as => :PublisherModelEmbedMany, :from => :test
     end
 
     define_constant :'Scoped::ScopedSubscriberModel', SubscriberModel do
@@ -215,17 +219,9 @@ module ModelsHelper
       include Mongoid::Document
       include Promiscuous::Subscriber
 
-      subscribe :as => :PublisherModelBelongsTo do
+      subscribe :as => :PublisherModelBelongsTo, :from => :test do
         field :publisher_model_id, :type => BSON::ObjectId
       end
-    end
-
-    define_constant :SubscriberDslModel do
-      include Mongoid::Document
-
-      field :field_1
-      field :field_2
-      field :publisher_id, :type => BSON::ObjectId
     end
   end
 end

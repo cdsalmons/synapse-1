@@ -29,6 +29,14 @@ class Promiscuous::Subscriber::Worker
     @eventual_destroyer.try(:stop)
   end
 
+  def pause
+    @message_synchronizer.pause
+  end
+
+  def resume
+    @message_synchronizer.resume
+  end
+
   def show_stop_status
     @num_show_stop_requests ||= 0
     @num_show_stop_requests += 1

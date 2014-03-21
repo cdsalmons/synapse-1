@@ -48,6 +48,11 @@ class Promiscuous::Subscriber::Worker::Message
   def happens_before_dependencies
     @happens_before_dependencies ||= begin
       deps = []
+      deps += (parsed_payload['dependencies'] || {})['external']
+                .to_a.map do |dep|
+                  dep =~ /^([^:]+):(.*)$/
+                  Promiscuous::Dependency.parse($2, :type => :external, :owner => $1)
+                end
       deps += read_dependencies
       deps += write_dependencies
 

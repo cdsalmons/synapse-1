@@ -14,19 +14,19 @@ module Promiscuous::Subscriber::Model::Mongoid
       return unless block
 
       begin
-        @in_subscribe_block = true
+        @subscribe_block_args = args.dup
         block.call
       ensure
-        @in_subscribe_block = false
+        @subscribe_block_args = nil
       end
     end
 
     def self.subscribe_on(method, options={})
       define_method(method) do |name, *args, &block|
         super(name, *args, &block)
-        if @in_subscribe_block
+        if @subscribe_block_args
           name = args.last[:as] if args.last.is_a?(Hash) && args.last[:as]
-          subscribe(name)
+          subscribe(name, *@subscribe_block_args)
         end
       end
     end
@@ -58,7 +58,10 @@ module Promiscuous::Subscriber::Model::Mongoid
   class EmbeddedDocs
     include Promiscuous::Subscriber::Model::Base
 
-    subscribe :as => 'Promiscuous::EmbeddedDocs'
+    def self.reload_route
+      subscribe :from => '*', :as => 'Promiscuous::EmbeddedDocs'
+    end
+    reload_route
 
     def __promiscuous_update(payload, options={})
       old_embeddeds = options[:old_value]

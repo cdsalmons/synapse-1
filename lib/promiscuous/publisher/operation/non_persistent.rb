@@ -19,7 +19,7 @@ class Promiscuous::Publisher::Operation::NonPersistent < Promiscuous::Publisher:
 
   def operation_payloads
     return [] if self.failed?
-    @instances.map { |instance| payloads_for(instance) }
+    @instances.map { |instance| payload_for(instance) }
   end
 
   def query_dependencies

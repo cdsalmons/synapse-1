@@ -1,7 +1,7 @@
 require 'fnv'
 
 class Promiscuous::Dependency
-  attr_accessor :orig_key, :internal_key, :version_pass1, :version_pass2, :type
+  attr_accessor :orig_key, :internal_key, :version_pass1, :version_pass2, :type, :owner
 
   def initialize(*args)
     options = args.extract_options!
@@ -38,6 +38,11 @@ class Promiscuous::Dependency
   def write?
     raise "Type not set" unless @type
     @type == :write
+  end
+
+  def external?
+    raise "Type not set" unless @type
+    @type == :external
   end
 
   def key(role, options={})

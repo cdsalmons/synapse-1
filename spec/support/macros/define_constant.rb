@@ -33,19 +33,24 @@ module DefineConstantMacros
 
     klass
   end
-end
 
-RSpec.configure do |config|
-  config.before do
-    @defined_constants = {}
-  end
-
-  config.after do
+  def cleanup_constants
     @defined_constants.to_a.each do |base, class_names|
       class_names.each do |class_name|
         base.send(:remove_const, class_name)
       end
     end
+    @defined_constants = {}
+  end
+end
+
+RSpec.configure do |config|
+  config.before do
+    cleanup_constants
+  end
+
+  config.after do
+    cleanup_constants
   end
 
   config.include DefineConstantMacros

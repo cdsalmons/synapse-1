@@ -15,6 +15,7 @@ describe Promiscuous do
         end
         pub.reload
 
+        # binding.pry
         eventually do
           sub = SubscriberModel.first
           sub.id.should == pub.id

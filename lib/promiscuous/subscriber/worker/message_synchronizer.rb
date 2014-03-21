@@ -38,6 +38,14 @@ class Promiscuous::Subscriber::Worker::MessageSynchronizer
     @root.pump.recover unless Promiscuous::Config.bootstrap
   end
 
+  def pause
+    @pause = true
+  end
+
+  def resume
+    @pause = false
+  end
+
   def disconnect
     @lock.synchronize do
       return unless connected?
@@ -87,6 +95,7 @@ class Promiscuous::Subscriber::Worker::MessageSynchronizer
   def queue_process_main_loop
     loop do
       msg, deps = @message_queue.pop
+      sleep 0.1 while @pause
 
       if dep = deps.pop
         get_redis = dep.redis_node

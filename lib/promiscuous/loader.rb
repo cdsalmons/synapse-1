@@ -16,6 +16,11 @@ module Promiscuous::Loader
   def self.cleanup
     Promiscuous::Publisher::Model.publishers.clear
     Promiscuous::Publisher::Model::Mongoid.collection_mapping.clear if defined?(Mongoid)
-    Promiscuous::Subscriber::Model.mapping.values.reject! { |as| as =~ /^Promiscuous::/ }
+    Promiscuous::Subscriber::Model.mapping.clear
+    Promiscuous::Decorator.mapping.clear
+
+    if defined?(Promiscuous::Subscriber::Model::Mongoid::EmbeddedDocs)
+      Promiscuous::Subscriber::Model::Mongoid::EmbeddedDocs.reload_route
+    end
   end
 end

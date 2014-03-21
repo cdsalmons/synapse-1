@@ -128,15 +128,14 @@ if ORM.has(:polymorphic)
         define_constant :Subscriber1 do
           include Mongoid::Document
           include Promiscuous::Subscriber
-          field :field_1
-          subscribe :as => :Publisher1
-          subscribe :field_1
+          subscribe :as => :Publisher1, :from => :test do
+            field :field_1
+          end
         end
 
         define_constant :Subscriber2, Subscriber1 do
-          field :field_2
-          subscribe :as => :Publisher2
-          subscribe :field_2
+            field :field_2
+            subscribe :field_1, :field_2, :as => :Publisher2, :from => :test
         end
       end
 
@@ -194,15 +193,15 @@ if ORM.has(:polymorphic)
         define_constant :SubscriberModelChildRoot, SubscriberModelHidden do
           include Promiscuous::Subscriber
           field :child_field_1
-          subscribe :as   =>  :PublisherModelChildRoot
-          subscribe :field_1, :child_field_1
+          subscribe :field_1, :child_field_1,
+                    :as => :PublisherModelChildRoot, :from => :test
         end
 
         define_constant :SubscriberModelAnotherChildRoot, SubscriberModelHidden do
           include Promiscuous::Subscriber
           field :another_child_field_1
-          subscribe :as   =>  :PublisherModelAnotherChildRoot
-          subscribe :field_1, :another_child_field_1
+          subscribe :field_1, :another_child_field_1,
+                    :as => :PublisherModelAnotherChildRoot, :from => :test
         end
       end
 
