@@ -5,12 +5,8 @@ module Promiscuous::Subscriber
   extend ActiveSupport::Concern
 
   included do
-    if defined?(Mongoid::Document) && self < Mongoid::Document
-      include Promiscuous::Subscriber::Model::Mongoid
-    elsif defined?(ActiveRecord::Base) && self < ActiveRecord::Base
-      include Promiscuous::Subscriber::Model::ActiveRecord
-    else
-      raise "What kind of model is this? try including Promiscuous::Subscriber after all your includes"
-    end
+    include Model::Mongoid      if defined?(Mongoid::Document)  && self < Mongoid::Document
+    include Model::ActiveRecord if defined?(ActiveRecord::Base) && self < ActiveRecord::Base
+    include Model::Observer     unless self < Model::Base
   end
 end
