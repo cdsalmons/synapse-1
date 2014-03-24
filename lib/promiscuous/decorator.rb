@@ -2,8 +2,8 @@ module Promiscuous::Decorator
   extend Promiscuous::Autoload
   extend ActiveSupport::Concern
 
-  include Promiscuous::Subscriber
   include Promiscuous::Publisher
+  include Promiscuous::Subscriber
 
   mattr_accessor :mapping
   self.mapping = {}

@@ -38,7 +38,10 @@ module Promiscuous::Publisher::Model::Ephemeral
     self.new_record = false
     true
   end
-  alias :save! :save
+
+  def save!
+    save
+  end
 
   def save_operation(operation)
     Promiscuous::Publisher::Operation::Ephemeral.new(:instance => self, :operation => operation).execute

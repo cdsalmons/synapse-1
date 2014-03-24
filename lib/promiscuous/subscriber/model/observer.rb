@@ -5,33 +5,48 @@ module Promiscuous::Subscriber::Model::Observer
   included do
     extend ActiveModel::Callbacks
     attr_accessor :id
-    define_model_callbacks :save, :create, :update, :destroy, :only => :after
+    define_model_callbacks :save, :create, :update, :destroy
   end
 
   def __promiscuous_update(payload, options={})
     super
-    case payload.operation
+    @payload_operation = payload.operation
+  end
+
+  def _save(operation)
+    # bubble up to the ephemeral if present
+    if respond_to?(:save_operation)
+      save_operation(operation)
+    end
+  end
+
+  def save
+    case @payload_operation
     when :create
-      run_callbacks :create
-      run_callbacks :save
-    when :update
-      run_callbacks :update
-      run_callbacks :save
+      run_callbacks :create do
+        run_callbacks(:save) { _save(:create) }
+      end
+    when :update, :decorate
+      run_callbacks :update do
+        run_callbacks(:save) { _save(:update) }
+      end
     when :destroy
       run_callbacks :destroy
     when :bootstrap_data
-      run_callbacks :create
-      run_callbacks :save
+      run_callbacks :create do
+        run_callbacks(:save) { _save(:create) }
+      end
     else
-      raise "Unknown operation #{payload.operation}"
+      raise "Unknown operation #{@payload_operation}"
     end
+  end
+
+  def save!
+    save
   end
 
   def destroy
     run_callbacks :destroy
-  end
-
-  def save!
   end
 
   module ClassMethods
