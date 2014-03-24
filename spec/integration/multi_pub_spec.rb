@@ -82,7 +82,7 @@ describe Promiscuous do
       @definitions[app_name.to_s] = block
     end
 
-    def switch_to(app)
+    def switch_to(app, &block)
       app = app.to_s
       @workers.values.each(&:pause)
 
@@ -91,6 +91,7 @@ describe Promiscuous do
 
       Promiscuous::Config.app = app
       @definitions[app].call
+      block.call if block
 
       @workers[app].try(:resume)
     end
@@ -203,6 +204,30 @@ describe Promiscuous do
       end
       sleep 0.5
       u.is_spammer.should == nil
+    end
+
+    it 'replicates when using callbacks' do
+      switch_to :app_a
+      Promiscuous.context do
+        A::User.create(:name => 'john')
+      end
+
+      switch_to :app_b do
+        B::User.before_save do
+          self.is_spammer = true
+        end
+      end
+
+      eventually do
+        B::User.first.name.should == 'john'
+      end
+
+      switch_to :app_c
+      eventually do
+        u = C::User.first
+        u.name.should == 'john'
+        u.is_spammer.should == true
+      end
     end
 
   end

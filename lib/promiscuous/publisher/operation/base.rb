@@ -338,7 +338,8 @@ class Promiscuous::Publisher::Operation::Base
     master_node = @op_lock.node
     operation_recovery_key = "#{@op_lock.key}:operation_recovery"
 
-    nodes_deps = (w+r+e).group_by(&:redis_node)
+    _e = e.reject { |d| d.version_pass1 }
+    nodes_deps = (w+r+_e).group_by(&:redis_node)
 
     unless self.recovering?
       recovery_payload_json = MultiJson.dump([self.class.name, operation, r, w, e, self.recovery_payload])
@@ -369,6 +370,8 @@ class Promiscuous::Publisher::Operation::Base
         versions[i] = tonumber(redis.call('get', key .. ':w')) or 0
       end
     SCRIPT
+
+    self.after_increment_test_hook
 
     e.each { |d| d.version_pass2 = d.version_pass1 }
 
@@ -473,32 +476,32 @@ class Promiscuous::Publisher::Operation::Base
     # We memoize the read dependencies not just for performance, but also
     # because we store the versions once incremented in these.
     return @read_dependencies if @read_dependencies
-    read_dependencies = current_context.read_operations.map(&:query_dependencies).flatten
+    r = current_context.read_operations.map(&:query_dependencies).flatten
 
     # We add extra_dependencies, which can contain the latest write, or user
     # context, etc.
-    current_context.extra_dependencies.each do |dep|
-      dep.version_pass1 = dep.version_pass2 = nil
-      read_dependencies << dep
+    r += current_context.extra_dependencies
+
+    r = r.reject { |d| d.owner }.uniq.each do |d|
+      d.type = :read
+      d.version_pass1 = d.version_pass2 = nil
     end
 
-    @read_dependencies = read_dependencies.reject { |d| !!d.owner }.uniq.each { |d| d.type = :read }
+    @read_dependencies = r
   end
   alias generate_read_dependencies read_dependencies
 
   def write_dependencies
-    @write_dependencies ||= self.query_dependencies.reject { |d| !!d.owner }.uniq.each { |d| d.type = :write }
+    @write_dependencies ||= self.query_dependencies.reject { |d| d.owner }.uniq.each { |d| d.type = :write }
   end
 
   def external_dependencies
     return @external_dependencies if @external_dependencies
-    ext_deps = current_context.read_operations.map(&:query_dependencies).flatten
 
-    current_context.extra_dependencies.each do |dep|
-      dep.version_pass1 = dep.version_pass2 = nil
-      ext_deps << dep
-    end
-
+    # extra_dependencies comes first, because they might have versions attached
+    # to them.
+    ext_deps = current_context.extra_dependencies.select { |d| d.owner }
+    ext_deps += current_context.read_operations.map(&:query_dependencies).flatten
     ext_deps += self.query_dependencies
     @external_dependencies = ext_deps.select { |d| d.owner }.uniq
   end
@@ -561,5 +564,9 @@ class Promiscuous::Publisher::Operation::Base
 
   def explain_operation(max_width)
     "Unknown database operation"
+  end
+
+  def after_increment_test_hook
+    # test hook
   end
 end

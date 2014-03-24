@@ -94,7 +94,16 @@ class Promiscuous::Subscriber::Worker::Message
   end
 
   def unit_of_work(type, &block)
-    Promiscuous.context { yield }
+    # write_dependencies are given for the publisher context, so that it
+    # uses the proper dependencies and versions.
+    external_dependencies = write_dependencies.map do |_d|
+      _d.dup.tap do |d|
+        d.type = :external
+        d.version_pass1 = d.version_pass2 + 1
+        d.version_pass2 = nil
+      end
+    end
+    Promiscuous.context('subscriber', :extra_dependencies => external_dependencies) { yield }
   ensure
     if defined?(ActiveRecord)
       ActiveRecord::Base.clear_active_connections!

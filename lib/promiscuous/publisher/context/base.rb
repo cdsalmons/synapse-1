@@ -30,7 +30,7 @@ class Promiscuous::Publisher::Context::Base
     @name = name.try(:to_s) || 'anonymous'
     @current_user = options[:current_user]
     @read_operations = []
-    @extra_dependencies = []
+    @extra_dependencies = options[:extra_dependencies].to_a
     @transaction_managers = {}
 
     Promiscuous::AMQP.ensure_connected

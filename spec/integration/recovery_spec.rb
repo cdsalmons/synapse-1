@@ -69,7 +69,8 @@ describe Promiscuous do
 
       # Raising on version= will simulate a failure right after the master node
       # access.
-      stub_once_on(Promiscuous::Dependency, :version_pass1=) { raise }
+      stub_once_on(Promiscuous::Publisher::Operation::Base, :after_increment_test_hook) { raise }
+
       expect { Promiscuous.context do
         NUM_DEPS.times.map { |i| PublisherModel.where(:field_2 => i.to_s).count }
         pub.update_attributes(:field_1 => '1')
