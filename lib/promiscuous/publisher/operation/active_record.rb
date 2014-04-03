@@ -174,6 +174,7 @@ class ActiveRecord::Base
 
     def execute(&db_operation)
       return db_operation.call unless model
+      return db_operation.call if Promiscuous.disabled?
       ensure_transaction!
 
       super do |query|
@@ -361,5 +362,12 @@ class ActiveRecord::Base
       # which is fine.
       connection.rollback_prepared_db_transaction(transaction_id)
     end
+  end
+end
+
+module ActiveRecord::Persistence
+  alias_method :touch_without_promiscuous, :touch
+  def touch(name = nil)
+    without_promiscuous { touch_without_promiscuous(name) }
   end
 end
