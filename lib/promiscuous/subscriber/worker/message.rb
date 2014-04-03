@@ -103,11 +103,8 @@ class Promiscuous::Subscriber::Worker::Message
         d.version_pass2 = nil
       end
     end
-    chain = block
-    if defined?(ActiveRecord)
-      chain = lambda { ActiveRecord::Base.transaction { chain.call } }
-    end
-    Promiscuous.context('subscriber', :extra_dependencies => external_dependencies) { chain.call }
+
+    Promiscuous.context('subscriber', :extra_dependencies => external_dependencies) { yield }
   ensure
     if defined?(ActiveRecord)
       ActiveRecord::Base.clear_active_connections!

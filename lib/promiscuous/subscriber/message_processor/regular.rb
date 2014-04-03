@@ -220,7 +220,11 @@ class Promiscuous::Subscriber::MessageProcessor::Regular < Promiscuous::Subscrib
   end
 
   def execute_operations
-    self.operations.each(&:execute)
+    if defined?(ActiveRecord)
+      ActiveRecord::Base.transaction { self.operations.each(&:execute) }
+    else
+      self.operations.each(&:execute)
+    end
   end
 
   def on_message

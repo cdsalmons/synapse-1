@@ -89,12 +89,13 @@ module Promiscuous::Subscriber::Model::Base
       super
 
       Promiscuous::Subscriber::Model.mapping.each do |from, _as|
+        new_mapping = {}
         _as.each do |as, defs|
           if defs[:model] == self && as == self.name
-            _as[subclass.name] = defs.merge(:model => subclass)
+            new_mapping[subclass.name] = defs.merge(:model => subclass)
           end
         end
-
+        _as.merge!(new_mapping)
       end
     end
 
