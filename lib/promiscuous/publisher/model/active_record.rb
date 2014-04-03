@@ -14,5 +14,9 @@ module Promiscuous::Publisher::Model::ActiveRecord
         publish(association.foreign_key) if self.in_publish_block?
       end
     end
+
+    def promiscuous_collection_name
+      self.table_name
+    end
   end
 end
