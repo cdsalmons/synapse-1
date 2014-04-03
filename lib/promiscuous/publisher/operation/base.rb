@@ -492,7 +492,15 @@ class Promiscuous::Publisher::Operation::Base
   alias generate_read_dependencies read_dependencies
 
   def write_dependencies
-    @write_dependencies ||= self.query_dependencies.reject { |d| d.owner }.uniq.each { |d| d.type = :write }
+    @write_dependencies ||= begin
+      user = current_context.current_user
+      deps = self.query_dependencies.reject { |d| d.owner }
+      if user && user.class.include?(Promiscuous::Publisher)
+        deps += dependencies_for(user)
+      end
+
+      deps.uniq.each { |d| d.type = :write }
+    end
   end
 
   def external_dependencies
