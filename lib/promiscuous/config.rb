@@ -53,7 +53,7 @@ module Promiscuous::Config
     self.socket_timeout       ||= 10
     self.heartbeat            ||= 60
     self.no_deps              ||= false
-    self.hash_size            ||= 2**20 # one million keys ~ 200Mb.
+    self.hash_size            ||= 0 # one million keys ~ 200Mb.
     self.prefetch             ||= self.bootstrap ? 10000000 : 1000
     self.recovery_timeout     ||= 10
     self.logger               ||= defined?(Rails) ? Rails.logger : Logger.new(STDERR).tap { |l| l.level = Logger::WARN }
