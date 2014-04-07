@@ -328,7 +328,7 @@ class ActiveRecord::Base
     def db_operation_and_select
       # XXX This is only supported by Postgres.
       @connection.exec_query("#{@connection.to_sql(@arel, @binds)}", @operation_name, @binds).to_a.tap do |result|
-        @instances = result.map { |row| model.instantiate(row) }
+        @instances = result.map { |row| model.instantiate(row.dup) }
       end
     end
   end
