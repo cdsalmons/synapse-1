@@ -9,7 +9,7 @@ class Promiscuous::Error::Subscriber < Promiscuous::Error::Base
   end
 
   def message
-    "#{inner.class}: #{inner.message} while processing #{payload}"
+    "#{inner.class}: #{inner.message}"
   end
 
   alias to_s message

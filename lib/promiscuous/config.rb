@@ -79,8 +79,6 @@ module Promiscuous::Config
         raise "Promiscuous.configure: please give a name to your app with \"config.app = 'your_app_name'\""
       end
     end
-
-    hook_fork
   end
 
   def self.hook_fork
