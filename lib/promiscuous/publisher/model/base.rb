@@ -17,6 +17,10 @@ module Promiscuous::Publisher::Model::Base
       @instance = instance
     end
 
+    def sync(options={}, &block)
+      Promiscuous::Publisher::Operation::Ephemeral.new(:instance => @instance, :operation => :update).execute
+    end
+
     def payload(options={})
       msg = {}
       msg[:types] = @instance.class.ancestors.select { |a| a < Promiscuous::Publisher::Model::Base }.map(&:publish_as)
