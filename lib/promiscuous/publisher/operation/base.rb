@@ -57,8 +57,10 @@ class Promiscuous::Publisher::Operation::Base
   end
 
   def publish_payload_in_rabbitmq_async
-    Promiscuous::AMQP.publish(:key => Promiscuous::Config.app, :payload => @payload,
-                              :on_confirm => method(:on_rabbitmq_confirm))
+    Promiscuous::Redis::Async.enqueue_work_for(Promiscuous::AMQP) do
+      Promiscuous::AMQP.publish(:key => Promiscuous::Config.app, :payload => @payload,
+                                :on_confirm => method(:on_rabbitmq_confirm))
+    end
   end
 
   def self.recover_payloads_for_rabbitmq
