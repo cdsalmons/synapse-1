@@ -111,7 +111,7 @@ class Promiscuous::Subscriber::Worker::Message
     end
   end
 
-  def process
+  def _process
     unit_of_work(context) do
       if Promiscuous::Config.bootstrap
         Promiscuous::Subscriber::MessageProcessor::Bootstrap.process(self)
@@ -123,5 +123,17 @@ class Promiscuous::Subscriber::Worker::Message
     e = Promiscuous::Error::Subscriber.new(orig_e, :payload => payload)
     Promiscuous.warn "[receive] #{payload} #{e}\n#{e.backtrace.join("\n")}"
     Promiscuous::Config.error_notifier.call(e)
+  end
+
+  def process
+    return _process unless Promiscuous::Config.log_times
+
+    start_time = Time.now.to_f
+    p = _process
+    end_time = Time.now.to_f
+
+    Promiscuous::Config.log_times.puts "[#{Promiscuous::Config.app}] receive #{start_time}-#{end_time} #{payload}"
+    Promiscuous::Config.log_times.flush
+    p
   end
 end

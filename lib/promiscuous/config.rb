@@ -6,7 +6,8 @@ module Promiscuous::Config
                  :socket_timeout, :heartbeat, :no_deps, :hash_size,
                  :prefetch, :recovery_timeout, :logger, :subscriber_threads,
                  :version_field, :error_notifier, :recovery_on_boot,
-                 :on_stats, :consistency, :generation, :downgrade_reads_to_writes
+                 :on_stats, :consistency, :generation, :downgrade_reads_to_writes,
+                 :log_times
 
   def self.backend=(value)
     @@backend = value
@@ -65,6 +66,7 @@ module Promiscuous::Config
     self.consistency          ||= :causal
     self.generation           ||= 1
     self.downgrade_reads_to_writes ||= false
+    self.log_times            ||= File.open(ENV['LOG_TIMES'], 'a') if ENV['LOG_TIMES']
 
     if self.consistency == :eventual && !defined?(Mongoid)
       raise "Eventual consistency is only supported with Mongoid for the moment"
