@@ -183,6 +183,7 @@ end
 end
 
 def switch_subscriber_mode(bootstrap_mode)
+  wait_for_rabbit_publish
   Promiscuous::Config.configure { |config| config.bootstrap = bootstrap_mode }
   if @worker
     @worker.pump.recover # send the nacked message again

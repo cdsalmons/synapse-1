@@ -55,6 +55,7 @@ end
 
 RSpec.configure do |config|
   config.after do
+    AsyncHelper.wait_for_rabbit_publish
     if @worker
       @worker.stop
       @worker = nil
