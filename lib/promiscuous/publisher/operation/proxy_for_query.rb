@@ -1,4 +1,5 @@
 class Promiscuous::Publisher::Operation::ProxyForQuery
+  include Promiscuous::Instrumentation
   attr_accessor :exception, :result
 
   def initialize(operation, &block)
@@ -27,7 +28,9 @@ class Promiscuous::Publisher::Operation::ProxyForQuery
 
   def call_and_remember_result(which)
     raise "Fatal: #{which} query unspecified" unless @queries[which]
-    @result = @queries[which].call(@operation)
+    @result = instrument "db_#{which}" do
+      @queries[which].call(@operation)
+    end
   rescue Exception => e
     @exception = e
   end

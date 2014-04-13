@@ -1,4 +1,6 @@
 class Promiscuous::Publisher::Operation::Base
+  include Promiscuous::Instrumentation
+
   mattr_accessor :recovery_mechanisms
   self.recovery_mechanisms = []
 
@@ -521,29 +523,19 @@ class Promiscuous::Publisher::Operation::Base
     !Promiscuous.disabled? && (current_context || write?)
   end
 
-  def _execute(&query_config)
+  def execute(&query_config)
     query = Promiscuous::Publisher::Operation::ProxyForQuery.new(self, &query_config)
 
     if should_instrument_query?
       raise Promiscuous::Error::MissingContext if !current_context && write?
-      execute_instrumented(query)
+      instrument :publish, :desc => proc { @payload } do
+        execute_instrumented(query)
+      end
     else
       query.call_and_remember_result(:non_instrumented)
     end
 
     query.result
-  end
-
-  def execute(&query_config)
-    return _execute(&query_config) unless Promiscuous::Config.log_times
-
-    start_time = Time.now.to_f
-    r = _execute(&query_config)
-    end_time = Time.now.to_f
-
-    Promiscuous::Config.log_times.puts "[#{Promiscuous::Config.app}] publish #{start_time}-#{end_time} #{@payload}" if @payload
-    Promiscuous::Config.log_times.flush
-    r
   end
 
   def query_dependencies

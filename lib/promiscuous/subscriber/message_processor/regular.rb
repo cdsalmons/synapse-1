@@ -1,4 +1,5 @@
 class Promiscuous::Subscriber::MessageProcessor::Regular < Promiscuous::Subscriber::MessageProcessor::Base
+  include Promiscuous::Instrumentation
   delegate :write_dependencies, :read_dependencies, :dependencies, :to => :message
 
   def nodes_with_deps
@@ -220,10 +221,12 @@ class Promiscuous::Subscriber::MessageProcessor::Regular < Promiscuous::Subscrib
   end
 
   def execute_operations
-    if defined?(ActiveRecord)
-      ActiveRecord::Base.transaction { self.operations.each(&:execute) }
-    else
-      self.operations.each(&:execute)
+    instrument :app_callbacks do
+      if defined?(ActiveRecord)
+        ActiveRecord::Base.transaction { self.operations.each(&:execute) }
+      else
+        self.operations.each(&:execute)
+      end
     end
   end
 
