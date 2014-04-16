@@ -18,6 +18,10 @@ class Promiscuous::Publisher::Context::Base
       yield
     ensure
       self.current.trace "<<< close <<<", :level => 1
+      if Promiscuous::Config.instrumentation_file
+        Thread.current[:pending_reads] = MultiJson.dump(self.current.read_operations
+                    .map { |op| op.query_dependencies.flatten.map(&:orig_key) }.select(&:present?))
+      end
       self.current = nil
 
       ActiveRecord::Base.clear_active_connections! if defined?(ActiveRecord::Base)

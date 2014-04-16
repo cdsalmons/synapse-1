@@ -15,7 +15,7 @@ class Promiscuous::Publisher::Context::Middleware < Promiscuous::Publisher::Cont
     # XXX We turn off the disabled flag when entering a middleware.
     # It has priority because it's much simpler to use for testing.
     old_disabled, Promiscuous.disabled = Promiscuous.disabled?, false
-    instrument(:app_controller, :desc => name) { super }
+    instrument(:app_controller, :desc => proc { "#{name} -- #{Thread.current[:pending_reads]}" }) { super }
   rescue Exception => e
     $promiscuous_last_exception = e if e.is_a? Promiscuous::Error::Base
     pretty_print_exception(e) unless e.is_a? ActionView::MissingTemplate

@@ -178,6 +178,13 @@ class Promiscuous::Publisher::Operation::Base
     payload[:dependencies][:external] = @committed_external_deps if @committed_external_deps.present?
     payload[:dependencies][:write]    = @committed_write_deps
 
+    if Promiscuous::Config.instrumentation_file
+      payload[:real_deps] = {}
+      payload[:real_deps][:read] = current_context.read_operations
+          .map { |op| op.query_dependencies.flatten.map(&:orig_key) }.select(&:present?)
+      payload[:real_deps][:write] = self.query_dependencies.map(&:orig_key)
+    end
+
     @payload = MultiJson.dump(payload)
   end
 

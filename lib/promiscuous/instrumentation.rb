@@ -1,11 +1,10 @@
 module Promiscuous::Instrumentation
-  singleton_class.send(:attr_accessor, :log_times)
-  self.log_times = ENV['LOG_TIMES']
+  singleton_class.send(:attr_accessor, :files)
+  self.files = {}
 
   def instrument(type, options={}, &block)
-    log_times = Promiscuous::Instrumentation.log_times
-
-    return block.call unless log_times
+    instr_file_name = Promiscuous::Config.instrumentation_file
+    return block.call unless instr_file_name
 
     start_time = Time.now.to_f
     r = block.call
@@ -15,8 +14,10 @@ module Promiscuous::Instrumentation
     desc = instance_eval(&desc) if desc.is_a?(Proc)
     id = "#{Process.pid}-#{Thread.current.object_id}"
 
-    File.open(log_times, 'a') do |log_file|
-      log_file.puts "[#{Promiscuous::Config.app} #{id}] #{type} #{start_time}-#{end_time} #{desc}"
+    if !options[:if] || options[:if].call
+      file = (Promiscuous::Instrumentation.files[instr_file_name] ||= File.open(instr_file_name, 'a'))
+      file.puts "[#{Promiscuous::Config.app} #{id}] #{type} #{start_time}-#{end_time} #{desc}"
+      file.flush
     end
 
     r
