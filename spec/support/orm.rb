@@ -1,6 +1,6 @@
 module ORM
   def self.backend
-    @backend ||= ENV['TEST_ENV'].to_sym
+    @backend ||= ENV['TEST_ENV'].gsub(/_mysql/, '').to_sym
   end
 
   def self.has(feature)

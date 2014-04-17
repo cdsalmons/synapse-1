@@ -1,4 +1,58 @@
 class ActiveRecord::Base
+  module Mysql2PCExtensions
+    extend ActiveSupport::Concern
+
+    def begin_db_transaction
+      @transaction_prepared = false
+      execute("XA BEGIN '#{quote_string(@current_transaction_id)}'")
+    end
+
+    def commit_db_transaction
+      if @transaction_prepared
+        commit_prepared_db_transaction(@current_transaction_id)
+      else
+        execute("XA END '#{quote_string(@current_transaction_id)}'")
+        execute("XA COMMIT '#{quote_string(@current_transaction_id)}' ONE PHASE")
+      end
+    end
+
+    def rollback_db_transaction
+      execute("XA END '#{quote_string(@current_transaction_id)}'") unless @transaction_prepared
+      rollback_prepared_db_transaction(@current_transaction_id)
+    end
+
+    def prepare_db_transaction
+      @transaction_prepared = true
+      execute("XA END '#{quote_string(@current_transaction_id)}'")
+      execute("XA PREPARE '#{quote_string(@current_transaction_id)}'")
+    end
+
+    def commit_prepared_db_transaction(xid)
+      execute("XA COMMIT '#{quote_string(xid)}'")
+    rescue Exception => e
+      raise unless e.message =~ /Unknown XID/
+    end
+
+    def rollback_prepared_db_transaction(xid)
+      execute("XA ROLLBACK '#{quote_string(xid)}'")
+    rescue Exception => e
+      raise unless e.message =~ /Unknown XID/
+    end
+
+    def supports_returning_statments?
+      false
+    end
+
+    included do
+      Promiscuous::Publisher::Operation::Base.register_recovery_mechanism do
+        connection = ActiveRecord::Base.connection
+        connection.exec_query("XA RECOVER", "Promiscuous Recovery").each do |tx|
+          ActiveRecord::Base::PromiscuousTransaction.recover_transaction(connection, tx['data'])
+        end
+      end
+    end
+  end
+
   module PostgresSQL2PCExtensions
     extend ActiveSupport::Concern
 
@@ -14,10 +68,14 @@ class ActiveRecord::Base
       raise unless e.message =~ /^PG::UndefinedObject/
     end
 
-    def rollback_prepared_db_transaction(xid, options={})
+    def rollback_prepared_db_transaction(xid)
       execute("ROLLBACK PREPARED '#{quote_string(xid)}'")
     rescue Exception => e
       raise unless e.message =~ /^PG::UndefinedObject/
+    end
+
+    def supports_returning_statments?
+      true
     end
 
     included do
@@ -50,11 +108,14 @@ class ActiveRecord::Base
           connection.class.class_eval do
             attr_accessor :current_transaction_id
 
-            if self.name == "ActiveRecord::ConnectionAdapters::PostgreSQLAdapter"
-              include ActiveRecord::Base::PostgresSQL2PCExtensions
-            end
-
             def promiscuous_hook; end
+
+            case self.name
+            when "ActiveRecord::ConnectionAdapters::PostgreSQLAdapter"
+              include ActiveRecord::Base::PostgresSQL2PCExtensions
+            when "ActiveRecord::ConnectionAdapters::Mysql2Adapter"
+              include ActiveRecord::Base::Mysql2PCExtensions
+            end
 
             alias_method :begin_db_transaction_without_promiscuous,    :begin_db_transaction
             alias_method :create_savepoint_without_promiscuous,        :create_savepoint
@@ -213,11 +274,18 @@ class ActiveRecord::Base
     def db_operation_and_select
       # XXX This is only supported by Postgres and should be in the postgres driver
 
-      @connection.exec_insert("#{@connection.to_sql(@arel, @binds)} RETURNING *", @operation_name, @binds).tap do |result|
-        @instances = result.map { |row| model.instantiate(row) }
+      if @connection.supports_returning_statments?
+        @connection.exec_insert("#{@connection.to_sql(@arel, @binds)} RETURNING *", @operation_name, @binds).tap do |result|
+          @instances = result.map { |row| model.instantiate(row) }
+        end
+        @instances.first.__send__(@pk)
+      else
+        @connection.exec_insert("#{@connection.to_sql(@arel, @binds)}", @operation_name, @binds)
+        @connection.instance_eval { @connection.last_id }.tap do |last_id|
+          result = @connection.exec_query("SELECT * FROM #{model.table_name} WHERE #{@pk} = #{last_id}")
+          @instances = result.map { |row| model.instantiate(row) }
+        end
       end
-      # TODO Use correct primary key
-      @instances.first.id
     end
   end
 
@@ -248,11 +316,24 @@ class ActiveRecord::Base
       (updated_fields_in_query.keys & model.published_db_fields).present?
     end
 
+    def sql_select_statment
+      arel = @arel.dup
+      arel.instance_eval { @ast = @ast.dup }
+      arel.ast.values = []
+      arel.to_sql.sub(/^UPDATE /, 'SELECT * FROM ')
+    end
+
     def db_operation_and_select
-      # TODO this should be in the postgres driver (to also leverage the cache)
-      @connection.exec_query("#{@connection.to_sql(@arel, @binds)} RETURNING *", @operation_name, @binds).tap do |result|
-        @instances = result.map { |row| model.instantiate(row) }
-      end.rows.size
+      if @connection.supports_returning_statments?
+        @connection.exec_query("#{@connection.to_sql(@arel, @binds)} RETURNING *", @operation_name, @binds).tap do |result|
+          @instances = result.map { |row| model.instantiate(row) }
+        end.rows.size
+      else
+        @connection.exec_update(@connection.to_sql(@arel, @binds), @operation_name, @binds).tap do
+          result = @connection.exec_query(sql_select_statment, @operation_name, @binds)
+          @instances = result.map { |row| model.instantiate(row) }
+        end
+      end
     end
 
     def execute(&db_operation)
@@ -269,12 +350,20 @@ class ActiveRecord::Base
       raise unless @arel.is_a?(Arel::DeleteManager)
     end
 
+    def sql_select_statment
+      @connection.to_sql(@arel.dup, @binds.dup).sub(/^DELETE /, 'SELECT * ')
+    end
+
     def db_operation_and_select
-      # TODO We only need the tracked attributes really (most likely, we just need ID)
-      # XXX This is only supported by Postgres.
-      @connection.exec_query("#{@connection.to_sql(@arel, @binds)} RETURNING *", @operation_name, @binds).tap do |result|
+      if @connection.supports_returning_statments?
+        @connection.exec_query("#{@connection.to_sql(@arel, @binds)} RETURNING *", @operation_name, @binds).tap do |result|
+          @instances = result.map { |row| model.instantiate(row) }
+        end.rows.size
+      else
+        result = @connection.exec_query(sql_select_statment, @operation_name, @binds)
         @instances = result.map { |row| model.instantiate(row) }
-      end.rows.size
+        @connection.exec_delete(@connection.to_sql(@arel, @binds), @operation_name, @binds)
+      end
     end
   end
 
