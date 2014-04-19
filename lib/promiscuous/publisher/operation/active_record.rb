@@ -401,6 +401,14 @@ class ActiveRecord::Base
         else [w.children.first.left.name, w.children.first.right]
         end
       end.compact
+
+      attrs = attrs.map do |key, value|
+        case value
+        when /^\$([0-9]+)$/ then [key, @binds[$1.to_i - 1][1]]
+        else [key, value]
+        end
+      end
+
       model.instantiate(Hash[attrs])
     end
 
