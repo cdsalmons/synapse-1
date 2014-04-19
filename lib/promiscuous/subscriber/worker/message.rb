@@ -53,7 +53,7 @@ class Promiscuous::Subscriber::Worker::Message
                 .to_a.map do |dep|
                   dep =~ /^([^:]+):(.*)$/
                   Promiscuous::Dependency.parse($2, :type => :external, :owner => $1)
-                end
+                end.select { |d| d.owner != Promiscuous::Config.app }
       deps += read_dependencies
       deps += write_dependencies
 
