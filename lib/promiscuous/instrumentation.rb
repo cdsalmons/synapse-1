@@ -1,7 +1,4 @@
 module Promiscuous::Instrumentation
-  singleton_class.send(:attr_accessor, :files)
-  self.files = {}
-
   def instrument(type, options={}, &block)
     instr_file_name = Promiscuous::Config.instrumentation_file
     return block.call unless instr_file_name
@@ -15,9 +12,9 @@ module Promiscuous::Instrumentation
     id = "#{Process.pid}-#{Thread.current.object_id}"
 
     if !options[:if] || options[:if].call
-      file = (Promiscuous::Instrumentation.files[instr_file_name] ||= File.open(instr_file_name, 'a'))
-      file.puts "[#{Promiscuous::Config.app} #{id}] #{type} #{start_time}-#{end_time} #{desc}"
-      file.flush
+      File.open(instr_file_name, 'a') do |f|
+        f.puts "[#{Promiscuous::Config.app} #{id}] #{type} #{start_time}-#{end_time} #{desc}"
+      end
     end
 
     r
