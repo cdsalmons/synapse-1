@@ -113,6 +113,8 @@ class Promiscuous::Subscriber::Worker::Message
   end
 
   def process
+    Promiscuous::Latch.latch_wait
+
     unit_of_work(context) do
       if Promiscuous::Config.bootstrap
         Promiscuous::Subscriber::MessageProcessor::Bootstrap.process(self)

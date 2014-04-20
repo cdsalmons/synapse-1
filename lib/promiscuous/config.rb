@@ -7,7 +7,7 @@ module Promiscuous::Config
                  :prefetch, :recovery_timeout, :logger, :subscriber_threads,
                  :version_field, :error_notifier, :recovery_on_boot,
                  :on_stats, :consistency, :generation, :downgrade_reads_to_writes,
-                 :instrumentation_file
+                 :instrumentation_file, :subscriber_latch
 
   def self.backend=(value)
     @@backend = value
@@ -67,6 +67,7 @@ module Promiscuous::Config
     self.generation           ||= 1
     self.downgrade_reads_to_writes ||= false
     self.instrumentation_file ||= ENV['INSTRUMENTATION_FILE']
+    self.subscriber_latch     ||= false
 
     if self.consistency == :eventual && !defined?(Mongoid)
       raise "Eventual consistency is only supported with Mongoid for the moment"

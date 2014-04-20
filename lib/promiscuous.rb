@@ -18,7 +18,8 @@ module Promiscuous
   extend Promiscuous::Autoload
   autoload :Common, :Publisher, :Subscriber, :Observer, :Worker, :Ephemeral,
            :CLI, :Error, :Loader, :AMQP, :Redis, :ZK, :Config, :Key,
-           :Convenience, :Dependency, :Timer, :Decorator, :Instrumentation
+           :Convenience, :Dependency, :Timer, :Decorator, :Instrumentation,
+           :Latch
 
   # Shortcut for the middleware, TODO make load on demand
   Middleware = Publisher::Context::Middleware
