@@ -54,44 +54,43 @@ class ActiveRecord::Base
   end
 
   module Oracle2PCExtensions
-    include Mysql2PCExtensions
+    def execute_proc(procedure, expected_return_value)
+      execute("DECLARE ret NUMBER:=0; BEGIN ret:=#{procedure}; IF ret != #{expected_return_value} THEN RAISE_APPLICATION_ERROR(-20000, ret); END IF; END;")
+    end
 
     def begin_db_transaction
       @transaction_prepared = false
+      execute_proc("DBMS_XA.XA_START(dbms_xa_xid('#{quote_string(@current_transaction_id)}'), DBMS_XA.TMNOFLAGS)", "DBMS_XA.XA_OK")
     end
 
     def commit_db_transaction
       if @transaction_prepared
         commit_prepared_db_transaction(@current_transaction_id)
       else
-        execute("XA END '#{quote_string(@current_transaction_id)}'")
-        execute("XA COMMIT '#{quote_string(@current_transaction_id)}' ONE PHASE")
+        execute_proc("DBMS_XA.XA_END(dbms_xa_xid('#{quote_string(@current_transaction_id)}'), DBMS_XA.TMSUCCESS)", "DBMS_XA.XA_OK")
+        execute_proc("DBMS_XA.XA_COMMIT(dbms_xa_xid('#{quote_string(@current_transaction_id)}'), TRUE)", "DBMS_XA.XA_OK")
       end
     end
 
     def rollback_db_transaction
-      execute("XA END '#{quote_string(@current_transaction_id)}'") unless @transaction_prepared
+      execute_proc("DBMS_XA.XA_END(dbms_xa_xid('#{quote_string(@current_transaction_id)}'), DBMS_XA.TMSUCCESS)", "DBMS_XA.XA_OK") unless @transaction_prepared
       rollback_prepared_db_transaction(@current_transaction_id)
     end
 
     def prepare_db_transaction
       @transaction_prepared = true
-      exec_query("select DBMS_XA.XA_START(dbms_xa_xid('#{quote_string(@current_transaction_id)}'), 0) from dual")
-      exec_query("select DBMS_XA.XA_END(dbms_xa_xid('#{quote_string(@current_transaction_id)}'), 0) from dual")
-      exec_query("select DBMS_XA.XA_PREPARE(dbms_xa_xid('#{quote_string(@current_transaction_id)}')) from dual")
+      execute_proc("DBMS_XA.XA_END(dbms_xa_xid('#{quote_string(@current_transaction_id)}'), DBMS_XA.TMSUCCESS)", "DBMS_XA.XA_OK")
+      execute_proc("DBMS_XA.XA_PREPARE(dbms_xa_xid('#{quote_string(@current_transaction_id)}'))", "DBMS_XA.XA_OK")
     end
 
     def commit_prepared_db_transaction(xid)
-      # require 'pry'
-      # binding.pry
-      execute("declare ret varchar(10); begin ret:=DBMS_XA.XA_COMMIT(dbms_xa_xid('#{quote_string(xid)}'), FALSE); end;")
-      # exec_query("select DBMS_XA.XA_COMMIT(dbms_xa_xid('#{quote_string(xid)}', FALSE)) from dual")
+      execute_proc("DBMS_XA.XA_COMMIT(dbms_xa_xid('#{quote_string(xid)}'), FALSE)", "DBMS_XA.XA_OK")
     rescue Exception => e
       raise unless e.message =~ /Unknown XID/
     end
 
     def rollback_prepared_db_transaction(xid)
-      execute("XA ROLLBACK '#{quote_string(xid)}'")
+      execute_proc("DBMS_XA.XA_ROLLBACK(dbms_xa_xid('#{quote_string(xid)}'))", "DBMS_XA.XA_OK")
     rescue Exception => e
       raise unless e.message =~ /Unknown XID/
     end
@@ -109,8 +108,6 @@ class ActiveRecord::Base
     end
 
     def commit_prepared_db_transaction(xid)
-      # We might always be racing with another instance, these sort of errors
-      # are spurious.
       execute("COMMIT PREPARED '#{quote_string(xid)}'")
     rescue Exception => e
       raise unless e.message =~ /^PG::UndefinedObject/
@@ -166,6 +163,11 @@ class ActiveRecord::Base
             when "ActiveRecord::ConnectionAdapters::OracleEnhancedAdapter"
               include ActiveRecord::Base::Oracle2PCExtensions
             end
+
+    def begin_db_transaction
+      @transaction_prepared = false
+      execute_proc("DBMS_XA.XA_START(dbms_xa_xid('#{quote_string(@current_transaction_id)}'), DBMS_XA.TMNOFLAGS)", "DBMS_XA.XA_OK")
+    end
 
             alias_method :begin_db_transaction_without_promiscuous,    :begin_db_transaction
             alias_method :create_savepoint_without_promiscuous,        :create_savepoint
@@ -326,7 +328,7 @@ class ActiveRecord::Base
       # XXX This is only supported by Postgres and should be in the postgres driver
 
       if @connection.supports_returning_statments?
-        @connection.exec_insert("#{@connection.to_sql(@arel, @binds)} RETURNING id INTO :yay", @operation_name, @binds).tap do |result|
+        @connection.exec_insert("#{@connection.to_sql(@arel, @binds)} RETURNING *", @operation_name, @binds).tap do |result|
           @instances = result.map { |row| model.instantiate(row) }
         end
         @instances.first.__send__(@pk)
