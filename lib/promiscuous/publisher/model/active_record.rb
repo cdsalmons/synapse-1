@@ -11,6 +11,7 @@ module Promiscuous::Publisher::Model::ActiveRecord
 
     def belongs_to(*args, &block)
       super.tap do |association|
+        association = association.values.first if association.is_a?(Hash)
         publish(association.foreign_key) if self.in_publish_block?
       end
     end

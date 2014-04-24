@@ -1,4 +1,10 @@
 class PromiscuousMigration < ActiveRecord::Migration
+  TABLES = [:publisher_models, :publisher_model_others,
+            :subscriber_models, :subscriber_model_others,
+            :publisher_dsl_models, :subscriber_dsl_models,
+            :publisher_another_dsl_models, :subscriber_another_dsl_models,
+            :publisher_model_belongs_tos, :subscriber_model_belongs_tos]
+
   def change
     [:publisher_models, :publisher_model_others,
      :subscriber_models, :subscriber_model_others,
@@ -27,20 +33,8 @@ class PromiscuousMigration < ActiveRecord::Migration
   migrate :up
 end
 
-DatabaseCleaner.strategy = :truncation
-
 RSpec.configure do |config|
   config.before(:each) do
-    DatabaseCleaner.start
-  end
-
-  config.after(:each) do
-    if ENV['TEST_ENV'] =~ /mysql/
-      ActiveRecord::Base.connection.tables.each do |table|
-        ActiveRecord::Base.connection.exec_delete("DELETE FROM #{table}", "Cleanup", [])
-      end
-    else
-      DatabaseCleaner.clean
-    end
+    ORM.purge!
   end
 end
