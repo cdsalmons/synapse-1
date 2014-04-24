@@ -1,18 +1,18 @@
 module ORM
   def self.backend
-    @backend ||= ENV['TEST_ENV'].gsub(/_mysql/, '').to_sym
+    @backend ||= ENV['TEST_ENV'].gsub(/_(mysql|oracle)/, '').gsub(/[0-9]/, '').to_sym
   end
 
   def self.has(feature)
     {
-      :active_record           => [:active_record32],
-      :transaction             => [:active_record32],
-      :mongoid                 => [:mongoid3],
-      :polymorphic             => [:mongoid3],
-      :embedded_documents      => [:mongoid3],
-      :many_embedded_documents => [:mongoid3],
-      :versioning              => [:mongoid3],
-      :find_and_modify         => [:mongoid3],
+      :active_record           => [:active_record],
+      :transaction             => [:active_record],
+      :mongoid                 => [:mongoid],
+      :polymorphic             => [:mongoid],
+      :embedded_documents      => [:mongoid],
+      :many_embedded_documents => [:mongoid],
+      :versioning              => [:mongoid],
+      :find_and_modify         => [:mongoid],
     }[feature].any? { |orm| orm == backend }
   end
 
@@ -36,10 +36,10 @@ module ORM
 
   def self.purge!
     Mongoid.purge! if has(:mongoid)
-
     if has(:active_record)
-      DatabaseCleaner.clean
-      DatabaseCleaner.start
+      PromiscuousMigration::TABLES.each do |table|
+        ActiveRecord::Base.connection.exec_delete("DELETE FROM #{table}", "Cleanup", [])
+      end
     end
   end
 end

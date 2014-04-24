@@ -53,6 +53,54 @@ class ActiveRecord::Base
     end
   end
 
+  module Oracle2PCExtensions
+    include Mysql2PCExtensions
+
+    def begin_db_transaction
+      @transaction_prepared = false
+    end
+
+    def commit_db_transaction
+      if @transaction_prepared
+        commit_prepared_db_transaction(@current_transaction_id)
+      else
+        execute("XA END '#{quote_string(@current_transaction_id)}'")
+        execute("XA COMMIT '#{quote_string(@current_transaction_id)}' ONE PHASE")
+      end
+    end
+
+    def rollback_db_transaction
+      execute("XA END '#{quote_string(@current_transaction_id)}'") unless @transaction_prepared
+      rollback_prepared_db_transaction(@current_transaction_id)
+    end
+
+    def prepare_db_transaction
+      @transaction_prepared = true
+      exec_query("select DBMS_XA.XA_START(dbms_xa_xid('#{quote_string(@current_transaction_id)}'), 0) from dual")
+      exec_query("select DBMS_XA.XA_END(dbms_xa_xid('#{quote_string(@current_transaction_id)}'), 0) from dual")
+      exec_query("select DBMS_XA.XA_PREPARE(dbms_xa_xid('#{quote_string(@current_transaction_id)}')) from dual")
+    end
+
+    def commit_prepared_db_transaction(xid)
+      # require 'pry'
+      # binding.pry
+      execute("declare ret varchar(10); begin ret:=DBMS_XA.XA_COMMIT(dbms_xa_xid('#{quote_string(xid)}'), FALSE); end;")
+      # exec_query("select DBMS_XA.XA_COMMIT(dbms_xa_xid('#{quote_string(xid)}', FALSE)) from dual")
+    rescue Exception => e
+      raise unless e.message =~ /Unknown XID/
+    end
+
+    def rollback_prepared_db_transaction(xid)
+      execute("XA ROLLBACK '#{quote_string(xid)}'")
+    rescue Exception => e
+      raise unless e.message =~ /Unknown XID/
+    end
+
+    def supports_returning_statments?
+      false
+    end
+  end
+
   module PostgresSQL2PCExtensions
     extend ActiveSupport::Concern
 
@@ -115,6 +163,8 @@ class ActiveRecord::Base
               include ActiveRecord::Base::PostgresSQL2PCExtensions
             when "ActiveRecord::ConnectionAdapters::Mysql2Adapter"
               include ActiveRecord::Base::Mysql2PCExtensions
+            when "ActiveRecord::ConnectionAdapters::OracleEnhancedAdapter"
+              include ActiveRecord::Base::Oracle2PCExtensions
             end
 
             alias_method :begin_db_transaction_without_promiscuous,    :begin_db_transaction
@@ -130,7 +180,8 @@ class ActiveRecord::Base
             end
 
             def begin_db_transaction
-              @current_transaction_id = SecureRandom.uuid
+              # @current_transaction_id = SecureRandom.uuid
+              @current_transaction_id = rand(1..1000000000).to_s
               begin_db_transaction_without_promiscuous
               with_promiscuous_transaction_context { |tx| tx.start }
             end
@@ -275,13 +326,15 @@ class ActiveRecord::Base
       # XXX This is only supported by Postgres and should be in the postgres driver
 
       if @connection.supports_returning_statments?
-        @connection.exec_insert("#{@connection.to_sql(@arel, @binds)} RETURNING *", @operation_name, @binds).tap do |result|
+        @connection.exec_insert("#{@connection.to_sql(@arel, @binds)} RETURNING id INTO :yay", @operation_name, @binds).tap do |result|
           @instances = result.map { |row| model.instantiate(row) }
         end
         @instances.first.__send__(@pk)
       else
         @connection.exec_insert("#{@connection.to_sql(@arel, @binds)}", @operation_name, @binds)
-        @connection.instance_eval { @connection.last_id }.tap do |last_id|
+        id = @binds.select { |k,v| k.name == 'id' }.first.last rescue nil
+        id ||= @connection.instance_eval { @connection.last_id }
+        id.tap do |last_id|
           result = @connection.exec_query("SELECT * FROM #{model.table_name} WHERE #{@pk} = #{last_id}")
           @instances = result.map { |row| model.instantiate(row) }
         end
@@ -330,7 +383,7 @@ class ActiveRecord::Base
         end.rows.size
       else
         @connection.exec_update(@connection.to_sql(@arel, @binds), @operation_name, @binds).tap do
-          result = @connection.exec_query(sql_select_statment, @operation_name, @binds)
+          result = @connection.exec_query(sql_select_statment, @operation_name)
           @instances = result.map { |row| model.instantiate(row) }
         end
       end
