@@ -4,37 +4,37 @@ class ActiveRecord::Base
 
     def begin_db_transaction
       @transaction_prepared = false
-      execute("XA BEGIN '#{quote_string(@current_xid)}'")
+      execute("XA BEGIN '#{@current_xid}'")
     end
 
     def commit_db_transaction
       if @transaction_prepared
         commit_prepared_db_transaction(@current_xid)
       else
-        execute("XA END '#{quote_string(@current_xid)}'")
-        execute("XA COMMIT '#{quote_string(@current_xid)}' ONE PHASE")
+        execute("XA END '#{@current_xid}'")
+        execute("XA COMMIT '#{@current_xid}' ONE PHASE")
       end
     end
 
     def rollback_db_transaction
-      execute("XA END '#{quote_string(@current_xid)}'") unless @transaction_prepared
+      execute("XA END '#{@current_xid}'") unless @transaction_prepared
       rollback_prepared_db_transaction(@current_xid)
     end
 
     def prepare_db_transaction
       @transaction_prepared = true
-      execute("XA END '#{quote_string(@current_xid)}'")
-      execute("XA PREPARE '#{quote_string(@current_xid)}'")
+      execute("XA END '#{@current_xid}'")
+      execute("XA PREPARE '#{@current_xid}'")
     end
 
     def commit_prepared_db_transaction(xid)
-      execute("XA COMMIT '#{quote_string(xid)}'")
+      execute("XA COMMIT '#{xid}'")
     rescue Exception => e
       raise unless e.message =~ /Unknown XID/
     end
 
     def rollback_prepared_db_transaction(xid)
-      execute("XA ROLLBACK '#{quote_string(xid)}'")
+      execute("XA ROLLBACK '#{xid}'")
     rescue Exception => e
       raise unless e.message =~ /Unknown XID/
     end
@@ -60,37 +60,37 @@ class ActiveRecord::Base
 
     def begin_db_transaction
       @transaction_prepared = false
-      execute_proc("DBMS_XA.XA_START(dbms_xa_xid('#{quote_string(@current_xid)}'), DBMS_XA.TMNOFLAGS)", "DBMS_XA.XA_OK")
+      execute_proc("DBMS_XA.XA_START(dbms_xa_xid('#{@current_xid}'), DBMS_XA.TMNOFLAGS)", "DBMS_XA.XA_OK")
     end
 
     def commit_db_transaction
       if @transaction_prepared
         commit_prepared_db_transaction(@current_xid)
       else
-        execute_proc("DBMS_XA.XA_END(dbms_xa_xid('#{quote_string(@current_xid)}'), DBMS_XA.TMSUCCESS)", "DBMS_XA.XA_OK")
-        execute_proc("DBMS_XA.XA_COMMIT(dbms_xa_xid('#{quote_string(@current_xid)}'), TRUE)", "DBMS_XA.XA_OK")
+        execute_proc("DBMS_XA.XA_END(dbms_xa_xid('#{@current_xid}'), DBMS_XA.TMSUCCESS)", "DBMS_XA.XA_OK")
+        execute_proc("DBMS_XA.XA_COMMIT(dbms_xa_xid('#{@current_xid}'), TRUE)", "DBMS_XA.XA_OK")
       end
     end
 
     def rollback_db_transaction
-      execute_proc("DBMS_XA.XA_END(dbms_xa_xid('#{quote_string(@current_xid)}'), DBMS_XA.TMSUCCESS)", "DBMS_XA.XA_OK") unless @transaction_prepared
+      execute_proc("DBMS_XA.XA_END(dbms_xa_xid('#{@current_xid}'), DBMS_XA.TMSUCCESS)", "DBMS_XA.XA_OK") unless @transaction_prepared
       rollback_prepared_db_transaction(@current_xid)
     end
 
     def prepare_db_transaction
       @transaction_prepared = true
-      execute_proc("DBMS_XA.XA_END(dbms_xa_xid('#{quote_string(@current_xid)}'), DBMS_XA.TMSUCCESS)", "DBMS_XA.XA_OK")
-      execute_proc("DBMS_XA.XA_PREPARE(dbms_xa_xid('#{quote_string(@current_xid)}'))", "DBMS_XA.XA_OK")
+      execute_proc("DBMS_XA.XA_END(dbms_xa_xid('#{@current_xid}'), DBMS_XA.TMSUCCESS)", "DBMS_XA.XA_OK")
+      execute_proc("DBMS_XA.XA_PREPARE(dbms_xa_xid('#{@current_xid}'))", "DBMS_XA.XA_OK")
     end
 
     def commit_prepared_db_transaction(xid)
-      execute_proc("DBMS_XA.XA_COMMIT(dbms_xa_xid('#{quote_string(xid)}'), FALSE)", "DBMS_XA.XA_OK")
+      execute_proc("DBMS_XA.XA_COMMIT(dbms_xa_xid('#{xid}'), FALSE)", "DBMS_XA.XA_OK")
     rescue Exception => e
       raise unless e.message =~ /Unknown XID/
     end
 
     def rollback_prepared_db_transaction(xid)
-      execute_proc("DBMS_XA.XA_ROLLBACK(dbms_xa_xid('#{quote_string(xid)}'))", "DBMS_XA.XA_OK")
+      execute_proc("DBMS_XA.XA_ROLLBACK(dbms_xa_xid('#{xid}'))", "DBMS_XA.XA_OK")
     rescue Exception => e
       raise unless e.message =~ /Unknown XID/
     end
@@ -104,17 +104,18 @@ class ActiveRecord::Base
     extend ActiveSupport::Concern
 
     def prepare_db_transaction
-      execute("PREPARE TRANSACTION '#{quote_string(@current_xid)}'")
+      @transaction_prepared = true
+      execute("PREPARE TRANSACTION '#{@current_xid}'")
     end
 
     def commit_prepared_db_transaction(xid)
-      execute("COMMIT PREPARED '#{quote_string(xid)}'")
+      execute("COMMIT PREPARED '#{xid}'")
     rescue Exception => e
       raise unless e.message =~ /^PG::UndefinedObject/
     end
 
     def rollback_prepared_db_transaction(xid)
-      execute("ROLLBACK PREPARED '#{quote_string(xid)}'")
+      execute("ROLLBACK PREPARED '#{xid}'")
     rescue Exception => e
       raise unless e.message =~ /^PG::UndefinedObject/
     end
@@ -151,8 +152,6 @@ class ActiveRecord::Base
       connection_without_promiscuous.tap do |connection|
         unless defined?(connection.promiscuous_hook)
           connection.class.class_eval do
-            attr_accessor :current_xid
-
             def promiscuous_hook; end
 
             case self.name
@@ -178,6 +177,7 @@ class ActiveRecord::Base
 
             def begin_db_transaction
               # @current_xid = SecureRandom.uuid
+              @transaction_prepared = false
               @current_xid = rand(1..1000000000).to_s
               begin_db_transaction_without_promiscuous
               with_promiscuous_transaction_context { |tx| tx.start }
@@ -189,6 +189,7 @@ class ActiveRecord::Base
             end
 
             def rollback_db_transaction
+              return if @transaction_prepared
               with_promiscuous_transaction_context { |tx| tx.rollback }
               rollback_db_transaction_without_promiscuous
               @current_xid = nil
@@ -202,7 +203,7 @@ class ActiveRecord::Base
             def commit_db_transaction
               ops = with_promiscuous_transaction_context { |tx| tx.write_operations_to_commit }
               PromiscuousTransaction.new(:connection => self,
-                                         :transaction_id => self.current_xid,
+                                         :transaction_id => @current_xid,
                                          :transaction_operations => ops).execute do
                 commit_db_transaction_without_promiscuous
               end
@@ -498,16 +499,17 @@ class ActiveRecord::Base
     def self.recover_transaction(connection, transaction_id)
       op = new(:connection => connection, :transaction_id => transaction_id)
       # Getting the lock will trigger the real recovery mechanism
-      if op.acquire_op_lock
-        op.release_op_lock
-      end
+      lock_status = op.acquire_op_lock
+      op.release_op_lock
 
-      # In the event where the recovery payload wasn't found, we must roll back.
-      # If the operation was recoverable, but couldn't be recovered, an
-      # exception would be thrown, so we won't roll it back by mistake.
-      # If the operation was recovered, the roll back will result in an error,
-      # which is fine.
-      connection.rollback_prepared_db_transaction(transaction_id)
+      unless lock_status == :recovered
+        # In the event where the recovery payload wasn't found, we must roll back.
+        # If the operation was recoverable, but couldn't be recovered, an
+        # exception would be thrown, so we won't roll it back by mistake.
+        # If the operation was recovered, the roll back will result in an error,
+        # which is fine.
+        connection.rollback_prepared_db_transaction(transaction_id)
+      end
     end
   end
 end

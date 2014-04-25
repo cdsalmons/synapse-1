@@ -250,7 +250,7 @@ class Promiscuous::Publisher::Operation::Base
 
   def increment_read_and_write_dependencies_stub(num_pass, nodes_deps, operation_recovery_key,
                                                  inner_script, master_node, recovery_payload_json)
-    nodes_deps.map do |node, deps|
+    {master_node => []}.merge(nodes_deps).map do |node, deps|
       argv = []
       argv << Promiscuous::Key.new(:pub) # key prefixes
       argv << operation_recovery_key
@@ -414,11 +414,12 @@ class Promiscuous::Publisher::Operation::Base
   end
 
   def self._acquire_lock(mutex)
+    success = true
     loop do
       case mutex.lock
       # recover_operation_from_lock implicitely unlocks the lock.
-      when :recovered then recover_operation_from_lock(mutex)
-      when true       then return true
+      when :recovered then success = :recovered; recover_operation_from_lock(mutex)
+      when true       then return success
       when false      then return false
       end
     end
@@ -426,9 +427,8 @@ class Promiscuous::Publisher::Operation::Base
 
   def acquire_op_lock
     @op_lock = get_new_op_lock
-
-    unless self.class._acquire_lock(@op_lock)
-      raise Promiscuous::Error::LockUnavailable.new(@op_lock.key)
+    self.class._acquire_lock(@op_lock).tap do |ret|
+      raise Promiscuous::Error::LockUnavailable.new(@op_lock.key) unless ret
     end
   end
 
