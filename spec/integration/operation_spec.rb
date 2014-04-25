@@ -77,7 +77,11 @@ require 'spec_helper'
               PublisherModel.where(:id => 123).update_all(:field_1 => '1')
             end
           else
-            PublisherModel.where(:id => 123).update(:field_1 => '1')
+            if ORM.has?(:cequel)
+              PublisherModel.where(:id => PublisherModel.new.id).update_all(:field_1 => '1')
+            else
+              PublisherModel.where(:id => 123).update(:field_1 => '1')
+            end
           end
         end
 
@@ -86,7 +90,7 @@ require 'spec_helper'
     end
 
     context 'when using multi reads/writes on tracked attributes' do
-      it 'publishes proper dependencies', :pending => ORM.has(:active_record) && 'FIXMES' do
+      it 'publishes proper dependencies', :pending => (ORM.has(:active_record) || ORM.has(:cequel)) && 'FIXMES' do
         PublisherModel.track_dependencies_of :field_1
         PublisherModel.track_dependencies_of :field_2
 
@@ -160,18 +164,20 @@ require 'spec_helper'
       end
     end
 
-    context 'when using a uniqueness validator' do
-      it 'skips the query' do
-        PublisherModel.validates_uniqueness_of :field_1
+    if ORM.has?(:uniqueness)
+      context 'when using a uniqueness validator' do
+        it 'skips the query' do
+          PublisherModel.validates_uniqueness_of :field_1
 
-        pub = nil
-        Promiscuous.context do
-          pub = PublisherModel.create(:field_1 => '123')
+          pub = nil
+          Promiscuous.context do
+            pub = PublisherModel.create(:field_1 => '123')
+          end
+
+          dep = Promiscuous::AMQP::Fake.get_next_payload['dependencies']
+          dep['read'].should  == nil
+          dep['write'].should == hashed["publisher_models/id/#{pub.id}:0"]
         end
-
-        dep = Promiscuous::AMQP::Fake.get_next_payload['dependencies']
-        dep['read'].should  == nil
-        dep['write'].should == hashed["publisher_models/id/#{pub.id}:0"]
       end
     end
 
@@ -218,24 +224,26 @@ require 'spec_helper'
       end
     end
 
-    context 'when using sum' do
-      it 'track the read' do
-        PublisherModel.track_dependencies_of :field_1
-        without_promiscuous do
-          PublisherModel.create(:field_1 => '123')
-          PublisherModel.create(:field_1 => '123')
-        end
-        pub = nil
-        Promiscuous.context do
-          # sum on publisher_id, too lazy to change field_1 type to numeric
-          PublisherModel.where(:field_1 => '123').sum(:publisher_id)
-          pub = PublisherModel.create(:field_1 => '456')
-        end
+    if ORM.has?(:sum)
+      context 'when using sum' do
+        it 'track the read' do
+          PublisherModel.track_dependencies_of :field_1
+          without_promiscuous do
+            PublisherModel.create(:field_1 => '123')
+            PublisherModel.create(:field_1 => '123')
+          end
+          pub = nil
+          Promiscuous.context do
+            # sum on publisher_id, too lazy to change field_1 type to numeric
+            PublisherModel.where(:field_1 => '123').sum(:publisher_id)
+            pub = PublisherModel.create(:field_1 => '456')
+          end
 
-        dep = Promiscuous::AMQP::Fake.get_next_payload['dependencies']
-        dep['read'].should  == hashed["publisher_models/field_1/123:0"]
-        dep['write'].should == hashed["publisher_models/id/#{pub.id}:0",
-                                      "publisher_models/field_1/456:0"]
+          dep = Promiscuous::AMQP::Fake.get_next_payload['dependencies']
+          dep['read'].should  == hashed["publisher_models/field_1/123:0"]
+          dep['write'].should == hashed["publisher_models/id/#{pub.id}:0",
+                                        "publisher_models/field_1/456:0"]
+        end
       end
     end
 

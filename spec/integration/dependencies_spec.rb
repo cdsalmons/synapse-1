@@ -33,12 +33,14 @@ describe Promiscuous do
 
   context 'when doing multi updates' do
     it 'fails immediately' do
+      Promiscuous.context { 2.times { PublisherModel.create(:field_1 => '1') } }
       expect { Promiscuous.context { PublisherModel.update_all(:field_1 => '1') } }.to raise_error
     end
   end
 
   context 'when doing multi delete' do
     it 'fails immediately' do
+      Promiscuous.context { 2.times { PublisherModel.create(:field_1 => '1') } }
       expect { Promiscuous.context { PublisherModel.delete_all(:field_1 => '1') } }.to raise_error
     end
   end

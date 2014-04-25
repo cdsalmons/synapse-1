@@ -41,6 +41,9 @@ module Promiscuous::Publisher::Model::Base
       value = @instance.__send__(attr)
       value = value.promiscuous.payload if value.respond_to?(:promiscuous)
       value
+    rescue Exception => e
+      raise unless e.is_a?(missing_attribute_exception)
+      nil
     end
 
     def get_dependency(attr, value)
@@ -49,7 +52,7 @@ module Promiscuous::Publisher::Model::Base
       Promiscuous::Dependency.new(@collection, attr, value)
     end
 
-    def tracked_dependencies(options={})
+    def tracked_dependencies
       # FIXME This is not sufficient, we need to consider the previous and next
       # values in case of an update.
       # Note that the caller expect the id dependency to come first
@@ -57,8 +60,7 @@ module Promiscuous::Publisher::Model::Base
         begin
           [attr, @instance.__send__(attr)]
         rescue Exception => e
-          # Don't care about missing attributes for read dependencies.
-          raise e unless options[:allow_missing_attributes] && e.is_a?(ActiveModel::MissingAttributeError)
+          raise e unless e.is_a?(missing_attribute_exception)
         end
       end
       .map { |attr, value| get_dependency(attr, value) }
@@ -68,6 +70,10 @@ module Promiscuous::Publisher::Model::Base
     def external_dependencies
       # Overriden by lib/promiscuous/decorator.rb
       []
+    end
+
+    def missing_attribute_exception
+      NilClass
     end
   end
 
@@ -126,10 +132,6 @@ module Promiscuous::Publisher::Model::Base
 
     def promiscuous_collection_name
       self.name.pluralize.underscore
-    end
-
-    def get_operation_class_for(operation)
-      Promiscuous::Publisher::Operation::Base
     end
 
     def publish_as

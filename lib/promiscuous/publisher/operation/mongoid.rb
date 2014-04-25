@@ -146,6 +146,10 @@ class Moped::PromiscuousQueryWrapper < Moped::Query
       Mongoid::Factory.from_db(model, raw_instance) if raw_instance
     end
 
+    def needs_fetch_after_update?
+      false
+    end
+
     def use_id_selector(options={})
       selector = {'_id' => @instance.id}.merge(@query.selector.select { |k,v| k.to_s.include?("_id") })
 

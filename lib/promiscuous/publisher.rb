@@ -7,6 +7,7 @@ module Promiscuous::Publisher
   included do
     include Model::Mongoid      if defined?(Mongoid::Document)  && self < Mongoid::Document
     include Model::ActiveRecord if defined?(ActiveRecord::Base) && self < ActiveRecord::Base
+    include Model::Cequel       if defined?(Cequel::Record)     && self < Cequel::Record
     include Model::Ephemeral    unless self < Model::Base
   end
 end

@@ -40,7 +40,8 @@ RSpec.configure do |config|
   config.include DependencyHelper
   config.include MocksHelper
 
-  config.after { Promiscuous::Loader.cleanup }
+  config.before(:each) { db_purge! }
+  config.after(:each) { Promiscuous::Loader.cleanup }
 end
 
 Promiscuous::CLI.new.trap_debug_signals

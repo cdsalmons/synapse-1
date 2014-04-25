@@ -4,6 +4,14 @@ module Promiscuous::Publisher::Model::ActiveRecord
 
   require 'promiscuous/publisher/operation/active_record'
 
+  class PromiscuousMethods
+    include Promiscuous::Publisher::Model::Base::PromiscuousMethodsBase
+
+    def missing_attribute_exception
+      ActiveModel::MissingAttributeError
+    end
+  end
+
   module ClassMethods
     def __promiscuous_missing_record_exception
       ActiveRecord::RecordNotFound

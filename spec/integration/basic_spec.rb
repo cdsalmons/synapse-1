@@ -15,7 +15,6 @@ describe Promiscuous do
         end
         pub.reload
 
-        # binding.pry
         eventually do
           sub = SubscriberModel.first
           sub.id.should == pub.id
@@ -31,14 +30,7 @@ describe Promiscuous do
         pub = Promiscuous.context do
           PublisherModel.create(:field_1 => '1', :field_2 => '2', :field_3 => '3')
         end
-
-        # sleep 0.1
-        # require 'pry'
-        # binding.pry
-        pub.reload 
-        Thread.new do
-          puts "--------------> #{PublisherModel.find(pub.id)}"
-        end.join
+        pub.reload
 
         eventually do
           sub = SubscriberModel.first

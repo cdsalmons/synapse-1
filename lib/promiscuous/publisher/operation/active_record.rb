@@ -4,27 +4,27 @@ class ActiveRecord::Base
 
     def begin_db_transaction
       @transaction_prepared = false
-      execute("XA BEGIN '#{quote_string(@current_transaction_id)}'")
+      execute("XA BEGIN '#{quote_string(@current_xid)}'")
     end
 
     def commit_db_transaction
       if @transaction_prepared
-        commit_prepared_db_transaction(@current_transaction_id)
+        commit_prepared_db_transaction(@current_xid)
       else
-        execute("XA END '#{quote_string(@current_transaction_id)}'")
-        execute("XA COMMIT '#{quote_string(@current_transaction_id)}' ONE PHASE")
+        execute("XA END '#{quote_string(@current_xid)}'")
+        execute("XA COMMIT '#{quote_string(@current_xid)}' ONE PHASE")
       end
     end
 
     def rollback_db_transaction
-      execute("XA END '#{quote_string(@current_transaction_id)}'") unless @transaction_prepared
-      rollback_prepared_db_transaction(@current_transaction_id)
+      execute("XA END '#{quote_string(@current_xid)}'") unless @transaction_prepared
+      rollback_prepared_db_transaction(@current_xid)
     end
 
     def prepare_db_transaction
       @transaction_prepared = true
-      execute("XA END '#{quote_string(@current_transaction_id)}'")
-      execute("XA PREPARE '#{quote_string(@current_transaction_id)}'")
+      execute("XA END '#{quote_string(@current_xid)}'")
+      execute("XA PREPARE '#{quote_string(@current_xid)}'")
     end
 
     def commit_prepared_db_transaction(xid)
@@ -60,27 +60,27 @@ class ActiveRecord::Base
 
     def begin_db_transaction
       @transaction_prepared = false
-      execute_proc("DBMS_XA.XA_START(dbms_xa_xid('#{quote_string(@current_transaction_id)}'), DBMS_XA.TMNOFLAGS)", "DBMS_XA.XA_OK")
+      execute_proc("DBMS_XA.XA_START(dbms_xa_xid('#{quote_string(@current_xid)}'), DBMS_XA.TMNOFLAGS)", "DBMS_XA.XA_OK")
     end
 
     def commit_db_transaction
       if @transaction_prepared
-        commit_prepared_db_transaction(@current_transaction_id)
+        commit_prepared_db_transaction(@current_xid)
       else
-        execute_proc("DBMS_XA.XA_END(dbms_xa_xid('#{quote_string(@current_transaction_id)}'), DBMS_XA.TMSUCCESS)", "DBMS_XA.XA_OK")
-        execute_proc("DBMS_XA.XA_COMMIT(dbms_xa_xid('#{quote_string(@current_transaction_id)}'), TRUE)", "DBMS_XA.XA_OK")
+        execute_proc("DBMS_XA.XA_END(dbms_xa_xid('#{quote_string(@current_xid)}'), DBMS_XA.TMSUCCESS)", "DBMS_XA.XA_OK")
+        execute_proc("DBMS_XA.XA_COMMIT(dbms_xa_xid('#{quote_string(@current_xid)}'), TRUE)", "DBMS_XA.XA_OK")
       end
     end
 
     def rollback_db_transaction
-      execute_proc("DBMS_XA.XA_END(dbms_xa_xid('#{quote_string(@current_transaction_id)}'), DBMS_XA.TMSUCCESS)", "DBMS_XA.XA_OK") unless @transaction_prepared
-      rollback_prepared_db_transaction(@current_transaction_id)
+      execute_proc("DBMS_XA.XA_END(dbms_xa_xid('#{quote_string(@current_xid)}'), DBMS_XA.TMSUCCESS)", "DBMS_XA.XA_OK") unless @transaction_prepared
+      rollback_prepared_db_transaction(@current_xid)
     end
 
     def prepare_db_transaction
       @transaction_prepared = true
-      execute_proc("DBMS_XA.XA_END(dbms_xa_xid('#{quote_string(@current_transaction_id)}'), DBMS_XA.TMSUCCESS)", "DBMS_XA.XA_OK")
-      execute_proc("DBMS_XA.XA_PREPARE(dbms_xa_xid('#{quote_string(@current_transaction_id)}'))", "DBMS_XA.XA_OK")
+      execute_proc("DBMS_XA.XA_END(dbms_xa_xid('#{quote_string(@current_xid)}'), DBMS_XA.TMSUCCESS)", "DBMS_XA.XA_OK")
+      execute_proc("DBMS_XA.XA_PREPARE(dbms_xa_xid('#{quote_string(@current_xid)}'))", "DBMS_XA.XA_OK")
     end
 
     def commit_prepared_db_transaction(xid)
@@ -104,7 +104,7 @@ class ActiveRecord::Base
     extend ActiveSupport::Concern
 
     def prepare_db_transaction
-      execute("PREPARE TRANSACTION '#{quote_string(@current_transaction_id)}'")
+      execute("PREPARE TRANSACTION '#{quote_string(@current_xid)}'")
     end
 
     def commit_prepared_db_transaction(xid)
@@ -151,7 +151,7 @@ class ActiveRecord::Base
       connection_without_promiscuous.tap do |connection|
         unless defined?(connection.promiscuous_hook)
           connection.class.class_eval do
-            attr_accessor :current_transaction_id
+            attr_accessor :current_xid
 
             def promiscuous_hook; end
 
@@ -163,11 +163,6 @@ class ActiveRecord::Base
             when "ActiveRecord::ConnectionAdapters::OracleEnhancedAdapter"
               include ActiveRecord::Base::Oracle2PCExtensions
             end
-
-    def begin_db_transaction
-      @transaction_prepared = false
-      execute_proc("DBMS_XA.XA_START(dbms_xa_xid('#{quote_string(@current_transaction_id)}'), DBMS_XA.TMNOFLAGS)", "DBMS_XA.XA_OK")
-    end
 
             alias_method :begin_db_transaction_without_promiscuous,    :begin_db_transaction
             alias_method :create_savepoint_without_promiscuous,        :create_savepoint
@@ -182,8 +177,8 @@ class ActiveRecord::Base
             end
 
             def begin_db_transaction
-              # @current_transaction_id = SecureRandom.uuid
-              @current_transaction_id = rand(1..1000000000).to_s
+              # @current_xid = SecureRandom.uuid
+              @current_xid = rand(1..1000000000).to_s
               begin_db_transaction_without_promiscuous
               with_promiscuous_transaction_context { |tx| tx.start }
             end
@@ -196,7 +191,7 @@ class ActiveRecord::Base
             def rollback_db_transaction
               with_promiscuous_transaction_context { |tx| tx.rollback }
               rollback_db_transaction_without_promiscuous
-              @current_transaction_id = nil
+              @current_xid = nil
             end
 
             def rollback_to_savepoint
@@ -207,12 +202,12 @@ class ActiveRecord::Base
             def commit_db_transaction
               ops = with_promiscuous_transaction_context { |tx| tx.write_operations_to_commit }
               PromiscuousTransaction.new(:connection => self,
-                                         :transaction_id => self.current_transaction_id,
+                                         :transaction_id => self.current_xid,
                                          :transaction_operations => ops).execute do
                 commit_db_transaction_without_promiscuous
               end
               with_promiscuous_transaction_context { |tx| tx.commit }
-              @current_transaction_id = nil
+              @current_xid = nil
             end
 
             def release_savepoint

@@ -13,8 +13,14 @@ module ORM
       :many_embedded_documents => [:mongoid],
       :versioning              => [:mongoid],
       :find_and_modify         => [:mongoid],
+      :uniqueness              => [:active_record, :mongoid],
+      :sum                     => [:active_record, :mongoid],
+      :cequel                  => [:cequel],
     }[feature].any? { |orm| orm == backend }
   end
+
+  class << self; alias has? has; end
+
 
   if has(:mongoid)
     #Operation = Promiscuous::Publisher::Model::Mongoid::Operation
@@ -36,10 +42,5 @@ module ORM
 
   def self.purge!
     Mongoid.purge! if has(:mongoid)
-    if has(:active_record)
-      PromiscuousMigration::TABLES.each do |table|
-        ActiveRecord::Base.connection.exec_delete("DELETE FROM #{table}", "Cleanup", [])
-      end
-    end
   end
 end

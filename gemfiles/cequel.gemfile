@@ -1,0 +1,20 @@
+source 'https://rubygems.org'
+gemspec
+
+gem 'rake'
+gem 'rspec'
+gem 'rspec-retry', :require => false
+gem 'mocha', :require => false
+
+gem 'database_cleaner'
+gem 'simplecov',   :require => false
+gem 'coveralls',   :require => false
+
+platforms :ruby do
+  gem 'cequel'
+end
+
+group :development do
+  gem 'pry'
+  gem 'colorize'
+end

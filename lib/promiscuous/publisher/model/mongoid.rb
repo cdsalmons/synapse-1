@@ -57,13 +57,5 @@ module Promiscuous::Publisher::Model::Mongoid
     def promiscuous_collection_name
       self.collection.name
     end
-
-    def get_operation_class_for(operation)
-      if operation == :create
-        Moped::PromiscuousCollectionWrapper::PromiscuousCollectionOperation
-      else
-        Moped::PromiscuousQueryWrapper::PromiscuousQueryOperation
-      end
-    end
   end
 end

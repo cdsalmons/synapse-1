@@ -15,7 +15,7 @@ class Promiscuous::Publisher::Operation::Base
   attr_accessor :operation
 
   def initialize(options={})
-    @operation = options[:operation]
+    @operation ||= options[:operation]
   end
 
   def read?
@@ -473,12 +473,13 @@ class Promiscuous::Publisher::Operation::Base
       # pick the first one. In most cases, it should resolve to the id
       # dependency.
       # If we don't have any, the driver should track individual instances.
-      best_dependency = instance.promiscuous.tracked_dependencies(:allow_missing_attributes => true).first
+      best_dependency = instance.promiscuous.tracked_dependencies.first
       [best_dependency].compact + ext
     else
       # Note that tracked_dependencies will not return the id dependency if it
       # doesn't exist which can only happen for create operations and auto
       # generated ids.
+      instance.id # raises a missing_attribute if needed.
       instance.promiscuous.tracked_dependencies + ext
     end
   end

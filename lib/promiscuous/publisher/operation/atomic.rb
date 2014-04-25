@@ -53,8 +53,8 @@ class Promiscuous::Publisher::Operation::Atomic < Promiscuous::Publisher::Operat
       use_id_selector
     end
 
-    # The driver is responsible to set instance to the appropriate value.
     query.call_and_remember_result(:instrumented)
+    reload_instance if needs_fetch_after_update? && operation == :update
 
     if query.failed?
       # If we get an network failure, we should retry later.
@@ -159,6 +159,11 @@ class Promiscuous::Publisher::Operation::Atomic < Promiscuous::Publisher::Operat
 
   def reload_instance
     @instance = fetch_instance
+  end
+
+  def needs_fetch_after_update?
+    # Set to false if you can do a find and modify
+    true
   end
 
   def increment_version_in_document
