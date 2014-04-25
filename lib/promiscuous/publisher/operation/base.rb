@@ -167,7 +167,7 @@ class Promiscuous::Publisher::Operation::Base
     payload[:operations] = operation_payloads
     payload[:app] = Promiscuous::Config.app
     payload[:context] = current_context.name
-    payload[:current_user_id] = current_context.current_user.id if current_context.current_user
+    payload[:current_user_id] = current_context.current_user.id.to_s if current_context.current_user
     payload[:timestamp] = @timestamp
     payload[:generation] = Promiscuous::Config.generation
     # payload[:host] = Socket.gethostname

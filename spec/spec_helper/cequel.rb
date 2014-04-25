@@ -30,7 +30,7 @@ module ModelsHelper
       column :field_1, :text, :index => true
       column :field_2, :text, :index => true
       column :field_3, :text, :index => true
-      column :publisher_id, :int
+      column :publisher_id, :uuid, :index => true
 
       publish :field_1, :field_2, :field_3
     end
@@ -43,7 +43,6 @@ module ModelsHelper
       column :field_1, :text, :index => true
       column :field_2, :text, :index => true
       column :field_3, :text, :index => true
-      column :publisher_id, :int
 
       publish :field_1, :field_2, :field_3
     end
@@ -59,6 +58,7 @@ module ModelsHelper
       column :field_1, :text, :index => true
       column :field_2, :text, :index => true
       column :field_3, :text, :index => true
+      column :publisher_id, :uuid, :index => true
 
       subscribe :field_1, :field_2, :field_3, :as => :PublisherModel, :from => :test
     end

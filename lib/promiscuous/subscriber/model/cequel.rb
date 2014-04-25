@@ -14,8 +14,12 @@ module Promiscuous::Subscriber::Model::Cequel
 
     def __promiscuous_fetch_existing(id)
       # TODO
-      # key = subscribe_foreign_key
-      promiscuous_root_class.find(id)
+      key = subscribe_foreign_key
+      if key.to_s == 'id'
+        promiscuous_root_class.find(id)
+      else
+        promiscuous_root_class.__send__("find_by_#{key}", id)
+      end
     end
   end
 end

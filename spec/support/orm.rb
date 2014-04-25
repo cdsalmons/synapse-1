@@ -21,18 +21,18 @@ module ORM
 
   class << self; alias has? has; end
 
-
   if has(:mongoid)
-    #Operation = Promiscuous::Publisher::Model::Mongoid::Operation
     ID = :_id
-  elsif has(:active_record)
-    #Operation = Promiscuous::Publisher::Operation
+  else
     ID = :id
   end
 
   def self.generate_id
     if has(:mongoid)
       BSON::ObjectId.new
+    elsif has(:cequel)
+      @timeuuid_generator ||= Cql::TimeUuid::Generator.new
+      @timeuuid_generator.next
     else
       @ar_id ||= 10
       @ar_id += 1
