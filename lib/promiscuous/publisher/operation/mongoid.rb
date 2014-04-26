@@ -34,10 +34,8 @@ class Moped::PromiscuousCollectionWrapper < Moped::Collection
     end
 
     def recover_db_operation
-      without_promiscuous do
-        return if model.unscoped.where(:id => @instance.id).first # already done?
-        @collection.insert(@document)
-      end
+      return if model.unscoped.where(:id => @instance.id).first # already done?
+      @collection.insert(@document)
     end
 
     def execute_instrumented(query)
@@ -131,9 +129,9 @@ class Moped::PromiscuousQueryWrapper < Moped::Query
 
     def recover_db_operation
       if operation == :update
-        without_promiscuous { @query.update(@change) }
+        @query.update(@change)
       else
-        without_promiscuous { @query.remove }
+        @query.remove
       end
     end
 
@@ -142,7 +140,7 @@ class Moped::PromiscuousQueryWrapper < Moped::Query
     end
 
     def fetch_instance
-      raw_instance = without_promiscuous { @query.first }
+      raw_instance = @query.first
       Mongoid::Factory.from_db(model, raw_instance) if raw_instance
     end
 

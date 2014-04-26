@@ -158,7 +158,7 @@ class Promiscuous::Publisher::Operation::Atomic < Promiscuous::Publisher::Operat
   end
 
   def reload_instance
-    @instance = fetch_instance
+    @instance = without_promiscuous { fetch_instance }
   end
 
   def needs_fetch_after_update?

@@ -2,12 +2,41 @@ require 'cequel'
 
 module Cequel::Record
   def reload
-    hydrate(self.class.find(self.id).attributes)
+    hydrate(self.class.find(*self.class.key_columns.map { |c| self.__send__(c.name) }).attributes)
+  end
+end
+
+class Cequel::Metal::Batch
+  alias_method :apply_orig, :apply
+  def apply
+    if @statement_count > 1
+      ops = @statement.cql.split("\n")
+                      .map { |cql| Cql::Client::OperationHelpers.get_op_from_cql(cql) }
+                      .compact
+                      .select { |op| op.should_instrument_query? }
+      unless ops.empty?
+        raise "You cannot use batches with promiscuous. Offending query: #{ops}"
+      end
+    end
+
+    apply_orig
   end
 end
 
 module Cql::Client
   module OperationHelpers
+    extend ActiveSupport::Concern
+    attr_accessor :query
+
+    def self.get_op_from_cql(cql)
+      case cql
+      when /^INSERT INTO / then Cql::Client::InsertOperation.new(:query => cql)
+      when /^UPDATE /      then Cql::Client::UpdateOperation.new(:query => cql)
+      when /^DELETE FROM / then Cql::Client::UpdateOperation.new(:query => cql)
+      when /^SELECT /      then Cql::Client::SelectOperation.new(:query => cql)
+      end
+    end
+
     def initialize(options={})
       @query = options[:query]
       parse_query
@@ -50,6 +79,26 @@ module Cql::Client
         f.split(' = ').map(&:strip).map { |s| cleanup_value(s) }
       end]
     end
+
+    def recovery_payload
+      [@query]
+    end
+
+    def recover_db_operation
+      Cequel::Record.connection.execute(@query)
+    end
+
+    module ClassMethods
+      def recover_operation(query)
+        self.new(:query => query).tap do |op|
+          begin
+            op.reload_instance
+          rescue Cequel::Record::RecordNotFound
+          end
+        end
+      end
+    end
+
   end
 
   class InsertOperation < Promiscuous::Publisher::Operation::Atomic
@@ -68,18 +117,6 @@ module Cql::Client
     def execute_instrumented(query)
       @instance = model.hydrate(@attributes)
       super
-    end
-
-    def recovery_payload
-      super # TODO
-    end
-
-    def self.recover_operation(collection, instance_id)
-      super # TODO
-    end
-
-    def recover_db_operation
-      super # TODO
     end
   end
 
@@ -107,12 +144,13 @@ module Cql::Client
       # We are trying to be optimistic for the locking. We are trying to figure
       # out our dependencies with the selector upfront to avoid an extra read
       # from reload_instance.
-      @instance ||= get_selector_instance unless recovering?
+      # It's also important for a recovering delete.
+      @instance ||= get_selector_instance
       super
     end
 
     def fetch_instance
-      without_promiscuous { model.find(@selector['id']) }
+      model.find(@selector['id'])
     end
 
     def any_published_field_changed?
@@ -124,23 +162,11 @@ module Cql::Client
     end
 
     def increment_version_in_document
-      super # TODO
+      # TODO
     end
 
     def use_id_selector(options={})
-      super # TODO
-    end
-
-    def recovery_payload
-      super # TODO
-    end
-
-    def self.recover_operation(collection, instance_id)
-      super # TODO
-    end
-
-    def recover_db_operation
-      super # TODO
+      # TODO
     end
   end
 
@@ -183,15 +209,16 @@ module Cql::Client
     alias_method :execute_orig, :execute
 
     def execute(cql, options_or_consistency=nil)
-      op = case cql
-           when /^INSERT INTO / then InsertOperation.new(:query => cql)
-           when /^UPDATE /      then UpdateOperation.new(:query => cql)
-           when /^DELETE FROM / then UpdateOperation.new(:query => cql)
-           when /^SELECT /      then SelectOperation.new(:query => cql)
-           end
+      op = Cql::Client::OperationHelpers.get_op_from_cql(cql)
       # fetching the value makes our request synchronous, not optional.
-      op ? op.execute { execute_orig(cql, options_or_consistency).tap { |r| r.value } } :
-                        execute_orig(cql, options_or_consistency)
+      return execute_orig(cql, options_or_consistency) unless op
+
+      op.execute do |query|
+        query.non_instrumented { execute_orig(cql, options_or_consistency) }
+        query.instrumented do
+          execute_orig(op.query, options_or_consistency).tap { |r| r.value }
+        end
+      end
     end
   end
 end

@@ -47,6 +47,15 @@ module ModelsHelper
       publish :field_1, :field_2, :field_3
     end
 
+    define_constant :PublisherModelBelongsTo do
+      include Cequel::Record
+      include Promiscuous::Publisher
+
+      belongs_to :publisher_model
+      key :id, :timeuuid, auto: true
+
+      publish :publisher_model_id
+    end
 
     ##############################################################
 
@@ -75,8 +84,20 @@ module ModelsHelper
       subscribe :field_1, :field_2, :field_3, :as => :PublisherModelOther, :from => :test
     end
 
+    define_constant :SubscriberModelBelongsTo do
+      include Cequel::Record
+      include Promiscuous::Subscriber
+
+      belongs_to :publisher_model
+      key :id, :timeuuid, auto: true
+
+      subscribe :publisher_model_id, :as => :PublisherModelBelongsTo, :from => :test
+    end
+
     if $need_cequel_migrate
-      [PublisherModel, SubscriberModel, PublisherModelOther, SubscriberModelOther].each { |klass| klass.synchronize_schema }
+      [PublisherModel, SubscriberModel,
+       PublisherModelOther, SubscriberModelOther,
+       PublisherModelBelongsTo, SubscriberModelBelongsTo].each { |klass| klass.synchronize_schema }
       $need_cequel_migrate = false
     end
   end

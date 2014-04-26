@@ -216,8 +216,8 @@ class Promiscuous::Publisher::Operation::Base
 
     begin
       op = op_klass.constantize.recover_operation(*recovery_arguments)
-    rescue NameError
-      raise "invalid recover operation class: #{op_klass}"
+    rescue NameError => e
+      raise "invalid recover operation class: #{op_klass} (#{e})"
     end
 
     Thread.new do
@@ -235,7 +235,9 @@ class Promiscuous::Publisher::Operation::Base
           @op_lock = lock
           @recovery_data = recovery_data
 
-          query = Promiscuous::Publisher::Operation::ProxyForQuery.new(self) { recover_db_operation }
+          query = Promiscuous::Publisher::Operation::ProxyForQuery.new(self) do
+            without_promiscuous { recover_db_operation }
+          end
           self.execute_instrumented(query)
           query.result
         end
