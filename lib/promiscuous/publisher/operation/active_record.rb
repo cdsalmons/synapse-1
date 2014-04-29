@@ -344,6 +344,7 @@ class ActiveRecord::Base
     def initialize(arel, name, binds, options={})
       super
       @operation = :update
+      return if Promiscuous.disabled?
       raise unless @arel.is_a?(Arel::UpdateManager)
     end
 
@@ -388,7 +389,8 @@ class ActiveRecord::Base
     end
 
     def execute(&db_operation)
-      return db_operation.call unless model
+      return db_operation.call if Promiscuous.disabled?
+      return db_operation.call unless  model
       return db_operation.call unless any_published_field_changed?
       super
     end
