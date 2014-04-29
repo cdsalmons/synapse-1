@@ -2,6 +2,9 @@ raise "mongoid > 3.0.19 please" unless Gem.loaded_specs['mongoid'].version >= Ge
 raise "moped > 1.3.2 please"    unless Gem.loaded_specs['moped'].version   >= Gem::Version.new('1.3.2')
 
 require 'yaml'
+require 'moped'
+require 'mongoid'
+require 'promiscuous/mongoid'
 
 class Moped::PromiscuousCollectionWrapper < Moped::Collection
   class PromiscuousCollectionOperation < Promiscuous::Publisher::Operation::Atomic
