@@ -13,6 +13,7 @@ Gem::Specification.new do |s|
   s.homepage    = "http://github.com/crowdtap/promiscuous"
   s.summary     = "Model replication over RabbitMQ"
   s.description = "Replicate your Mongoid/ActiveRecord models across your applications"
+  s.license     = 'LGPL'
 
   s.executables   = ['promiscuous']
 
