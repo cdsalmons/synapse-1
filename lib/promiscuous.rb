@@ -68,6 +68,7 @@ module Promiscuous
     end
 
     def disabled
+      return true if ENV['NATIVE']
       return $promiscuous_disabled if Thread.current[:promiscuous_disabled].nil?
       Thread.current[:promiscuous_disabled]
     end
@@ -77,6 +78,7 @@ module Promiscuous
     end
 
     def disabled?
+      return true if ENV['NATIVE']
       !!Thread.current[:promiscuous_disabled]
     end
 
